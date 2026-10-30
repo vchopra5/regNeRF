@@ -1,0 +1,8 @@
+**/nerf_synthetic*
+
+.env
+.env.*
+!.env.example
+
+
+__pycache__/
