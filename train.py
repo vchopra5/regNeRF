@@ -10,10 +10,10 @@ from model import MipNeRF
 DATA_DIR = "nerf_synthetic/lego"
 SCALE = 2
 BATCH_SIZE = 256
-NUM_STEPS = 5000
+NUM_STEPS = 30_000
 LEARNING_RATE = 5e-4
 PRINT_EVERY = 100
-SAVE_EVERY = 1000
+SAVE_EVERY = 5_000
 
 
 def train():

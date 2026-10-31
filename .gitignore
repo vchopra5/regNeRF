@@ -11,3 +11,6 @@ __pycache__/
 *.pt
 *.pth
 *.ckpt
+
+# Rendered images
+/renders/
