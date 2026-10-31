@@ -28,53 +28,6 @@ def get_rays(H, W, focal, pose):
     return rays_o, rays_d, radii
 
 
-def sample_intervals(num_rays, near=2.0, far=6.0, N=64, device=None, dtype=torch.float32):
-    t_vals = torch.linspace(near, far, N+1, device=device, dtype=dtype)
-    return t_vals.expand(num_rays, -1)
-
-
-def conical_frustum_to_gaussian(rays_o, rays_d, t_vals, radii):
-
-    rays_o = rays_o.reshape(-1, 3)
-    rays_d = rays_d.reshape(-1, 3)
-    radii = radii.reshape(-1, 1)
-
-    t0= t_vals[..., :-1]
-    t1 = t_vals[..., 1:]
-
-    t_mu= (t0 + t1) / 2
-    t_delta = (t1 - t0)/ 2
-
-    denom  = 3*(t_mu**2) + (t_delta**2)
-
-    mean_t = t_mu + (2*t_mu*t_delta**2) / denom
-
-    var_t = (
-        t_delta**2 / 3
-        - (4 / 15)
-        * (t_delta**4 * (12 * t_mu**2 - t_delta**2))
-        /denom**2
-    )
-
-    var_r = radii**2 * (
-        t_mu**2 / 4
-        + 5 * t_delta**2 / 12
-        - (4/15)*t_delta**4/denom
-    )
-
-    means = rays_o[:, None, :] + rays_d[:, None, :]*mean_t[..., None]
-
-    d_sq = rays_d**2
-    d_mag_sq = d_sq.sum(dim=-1, keepdim=True).clamp_min(1e-10)
-
-    cov_diag = (
-        var_t[..., None]*d_sq[:, None, :]
-        + var_r[..., None]*(1 - d_sq / d_mag_sq)[:, None, :]
-    )
-
-    return means, cov_diag
-
-
 def load_data(scene_dir, split="train", scale=1):
     scene_dir = Path(scene_dir)
 

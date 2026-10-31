@@ -6,3 +6,8 @@
 
 
 __pycache__/
+
+# PyTorch model and checkpoint files
+*.pt
+*.pth
+*.ckpt
