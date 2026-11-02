@@ -13,9 +13,12 @@ def get_rays(H, W, focal, pose):
         indexing="xy"
     )
 
+    fx, fy, cx, cy, skew = (focal if isinstance(focal, tuple)
+                             else (focal, focal, W / 2, H / 2, 0.0))
+    y_cam = (y + 0.5 - cy) / fy
     directions = torch.stack([
-        (x + 0.5 - W / 2) / focal,
-        -(y + 0.5 - H / 2)/ focal,
+        (x + 0.5 - cx - skew * y_cam) / fx,
+        -y_cam,
         -torch.ones_like(x)
     ], dim=-1)
 
@@ -23,7 +26,7 @@ def get_rays(H, W, focal, pose):
 
     rays_o = pose[:3, 3].expand_as(rays_d)
 
-    radii = torch.full((H, W, 1), 2 / (focal*np.sqrt(12)), dtype=pose.dtype, device=pose.device)
+    radii = torch.full((H, W, 1), 2 / (fx*np.sqrt(12)), dtype=pose.dtype, device=pose.device)
 
     return rays_o, rays_d, radii
 
@@ -31,6 +34,9 @@ def get_rays(H, W, focal, pose):
 def load_data(scene_dir, split="train", scale=1):
     rng = np.random.default_rng(42)
     scene_dir = Path(scene_dir)
+    if (scene_dir / "cameras.npz").is_file():
+        from dtu import load_views
+        return load_views(scene_dir, split, scale)
 
     with open(scene_dir / f"transforms_{split}.json") as f:
         meta = json.load(f)

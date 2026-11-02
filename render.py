@@ -6,6 +6,8 @@ import math
 from pathlib import Path
 
 import torch
+import numpy as np
+import dtu
 from PIL import Image
 
 from data import get_rays
@@ -34,6 +36,14 @@ def parse_args():
 
 
 def load_camera(data_dir, split, image_index, scale):
+    if (data_dir / "cameras.npz").is_file():
+        ids = dtu.view_ids(split)
+        if not 0 <= image_index < len(ids):
+            raise ValueError(f"Image index must be between 0 and {len(ids) - 1}.")
+        index = ids[image_index]
+        with np.load(data_dir / "cameras.npz") as archive, Image.open(
+                data_dir / "image" / f"{index:06}.png") as source:
+            return dtu.camera(archive, index, source.size, scale)
     with (data_dir / f"transforms_{split}.json").open() as source:
         metadata = json.load(source)
     frames = metadata["frames"]
@@ -94,7 +104,8 @@ def main():
     # train.py saves either a state dictionary or a training checkpoint.
     checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
     state_dict = checkpoint["model"] if "model" in checkpoint else checkpoint
-    model = MipNeRF()
+    model = (MipNeRF(near=dtu.BOUNDS[0], far=dtu.BOUNDS[1])
+             if (args.data_dir / "cameras.npz").is_file() else MipNeRF())
     model.load_state_dict(state_dict)
     model.to(device)
 

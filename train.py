@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from data import load_data, get_rays
 from model import MipNeRF
 import numpy as np
+import dtu
 
 # Settings
 DATA_DIR = "nerf_synthetic/chair"
@@ -24,7 +25,7 @@ BOUND_STEPS = 256
 INITIAL_RANGE_FRACTION = 0.5
 PRINT_EVERY = 100
 SAVE_EVERY = 5_000
-DEPTH_WEIGHT = 0.02
+DEPTH_WEIGHT = 0.1
 
 
 def training_bounds(step, near, far):
@@ -40,7 +41,7 @@ def learning_rate(step):
     return multiplier * LR_INIT * (LR_FINAL / LR_INIT) ** progress
 
 
-def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint")):
+def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), depth_weight=DEPTH_WEIGHT):
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(SEED)
     rng = np.random.default_rng(SEED)
@@ -62,7 +63,8 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint")):
 
     # Sparse generation
 
-    train_indices = rng.choice(N, size=num_views, replace=False)
+    is_dtu = (Path(data_dir) / "cameras.npz").is_file()
+    train_indices = np.arange(num_views) if is_dtu else rng.choice(N, size=num_views, replace=False)
 
     poses = poses.to(device)
     # In case of RegNeRF, calculate camera position to add for depth loss
@@ -86,7 +88,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint")):
     print("Focal:", focal)
 
     # 2. Initialize model and optimizer
-    model = MipNeRF().to(device)
+    model = (MipNeRF(near=dtu.BOUNDS[0], far=dtu.BOUNDS[1]) if is_dtu else MipNeRF()).to(device)
     full_near, full_far = model.near, model.far
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -106,10 +108,11 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint")):
         image_idx = int(rng.choice(train_indices))
 
         pose = poses[image_idx]
+        ray_intrinsics = focal[image_idx] if is_dtu else focal
 
         # Generate all rays for this camera
         rays_o, rays_d, radii = get_rays(
-            H, W, focal, pose
+            H, W, ray_intrinsics, pose
         )
 
         # Flatten image into pixels and rays
@@ -147,7 +150,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint")):
         unseen_pose[3, 3] = 1
 
         patch_size = 8
-        rays_o, rays_d, radii = get_rays(H, W, focal, unseen_pose)
+        rays_o, rays_d, radii = get_rays(H, W, ray_intrinsics, unseen_pose)
 
         y = torch.randint(0, H - patch_size + 1, ()).item()
         x = torch.randint(0, W - patch_size + 1, ()).item()
@@ -168,7 +171,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint")):
         coarse_loss = F.mse_loss(coarse_rgb, batch_rgb)
         fine_loss = F.mse_loss(fine_rgb, batch_rgb)
 
-        loss = 0.1 * coarse_loss + fine_loss + DEPTH_WEIGHT*depth_loss
+        loss = 0.1 * coarse_loss + fine_loss + depth_weight * depth_loss
 
         # 6. Backpropagation
         optimizer.zero_grad()
@@ -208,4 +211,5 @@ if __name__ == "__main__":
     parser.add_argument("--data-dir", default=DATA_DIR)
     parser.add_argument("--num-views", type=int, default=9)
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("checkpoint"))
+    parser.add_argument("--depth-weight", type=float, default=DEPTH_WEIGHT)
     train(**vars(parser.parse_args()))
