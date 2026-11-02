@@ -14,7 +14,7 @@ import numpy as np
 DATA_DIR = "nerf_synthetic/chair"
 SCALE = 2
 BATCH_SIZE = 256
-NUM_STEPS = 50_000
+NUM_STEPS = 15_000
 SEED = 42
 LR_INIT = 2e-3
 LR_FINAL = 2e-5
@@ -24,7 +24,7 @@ BOUND_STEPS = 256
 INITIAL_RANGE_FRACTION = 0.5
 PRINT_EVERY = 100
 SAVE_EVERY = 5_000
-DEPTH_WEIGHT = 0.00
+DEPTH_WEIGHT = 0.02
 
 
 def training_bounds(step, near, far):

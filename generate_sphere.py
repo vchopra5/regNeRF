@@ -17,8 +17,12 @@ def generate(output):
     colours = np.array([[42, 107, 174], [246, 186, 60], [206, 72, 64]])
     light = np.array([1., -1., 2.]) / np.sqrt(6)
     for split, angles in {
-        "train": [(-45, 5), (0, 25), (45, 10)],
-        "test": [(22, 15)],
+        "train": [
+            (-45, 5), (0, 25), (45, 10),
+            (75, -20), (105, 40), (135, 0), (165, -30),
+            (-165, 55), (-135, 15), (-105, -10), (-75, 35), (-20, -40),
+        ],
+        "test": [(22, 15), (90, 10), (180, -15), (-120, 30)],
     }.items():
         (output / split).mkdir(parents=True, exist_ok=True)
         frames = []
