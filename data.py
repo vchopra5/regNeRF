@@ -29,6 +29,7 @@ def get_rays(H, W, focal, pose):
 
 
 def load_data(scene_dir, split="train", scale=1):
+    rng = np.random.default_rng(42)
     scene_dir = Path(scene_dir)
 
     with open(scene_dir / f"transforms_{split}.json") as f:

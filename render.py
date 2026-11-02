@@ -21,7 +21,7 @@ def positive_int(value):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", type=Path, default=Path("mipnerf_final.pt"))
+    parser.add_argument("--checkpoint", type=Path, default=Path("checkpoint/mipnerf_final.pt"))
     parser.add_argument("--data-dir", type=Path, default=Path("nerf_synthetic/lego"))
     parser.add_argument("--split", choices=("train", "val", "test"), default="test")
     parser.add_argument("--image-index", type=int, default=0)

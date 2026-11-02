@@ -285,7 +285,7 @@ class MipNeRF(nn.Module):
 
         return rgb_map, weights
 
-    def forward(self, rays_o, rays_d, radii):
+    def forward(self, rays_o, rays_d, radii, return_depth=False):
         # Expect a batch of flattened rays
         # rays_o: [B, 3]
         # rays_d: [B, 3]
@@ -320,5 +320,10 @@ class MipNeRF(nn.Module):
         fine_rgb, fine_weights = self.render_pass(
             rays_o, rays_d, radii, t_fine
         )
+
+        if return_depth:
+            midpoints = 0.5*(t_fine[..., :-1] + t_fine[..., 1:])
+            fine_depth = (fine_weights * midpoints).sum(dim=-1)
+            return coarse_rgb, fine_rgb, fine_depth
 
         return coarse_rgb, fine_rgb
