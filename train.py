@@ -13,9 +13,9 @@ import dtu
 
 # Settings
 DATA_DIR = "nerf_synthetic/chair"
-SCALE = 2
-BATCH_SIZE = 256
-NUM_STEPS = 15_000
+SCALE = 4
+BATCH_SIZE = 512
+NUM_STEPS = 44_000
 SEED = 42
 LR_INIT = 2e-3
 LR_FINAL = 2e-5
@@ -26,6 +26,24 @@ INITIAL_RANGE_FRACTION = 0.5
 PRINT_EVERY = 100
 SAVE_EVERY = 5_000
 DEPTH_WEIGHT = 0.1
+DEPTH_WEIGHT_START = 400.0
+DEPTH_DECAY_STEPS = 512
+
+
+def depth_patch_loss(depth, opacity):
+    """Weight the right and lower depth differences by the anchor pixel's opacity."""
+    anchor = depth[..., :-1, :-1]
+    dx = anchor - depth[..., :-1, 1:]
+    dy = anchor - depth[..., 1:, :-1]
+    weight = opacity[..., :-1, :-1].detach()
+    return (weight * (dx.square() + dy.square())).mean()
+
+
+def scheduled_depth_weight(step, final_weight):
+    if final_weight == 0:
+        return 0.0
+    progress = min(max(step / DEPTH_DECAY_STEPS, 0.0), 1.0)
+    return DEPTH_WEIGHT_START * (1 - progress) + final_weight * progress
 
 
 def training_bounds(step, near, far):
@@ -41,7 +59,8 @@ def learning_rate(step):
     return multiplier * LR_INIT * (LR_FINAL / LR_INIT) ** progress
 
 
-def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), depth_weight=DEPTH_WEIGHT):
+def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), depth_weight=DEPTH_WEIGHT,
+          stop_after=None, after_step=None):
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(SEED)
     rng = np.random.default_rng(SEED)
@@ -99,7 +118,10 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     model.train()
 
     # 3. Training loop
-    for step in range(1, NUM_STEPS + 1):
+    last_step = NUM_STEPS if stop_after is None else stop_after
+    if not 1 <= last_step <= NUM_STEPS:
+        raise ValueError(f"stop_after must be between 1 and {NUM_STEPS}")
+    for step in range(1, last_step + 1):
         model.near, model.far = training_bounds(step, full_near, full_far)
         for group in optimizer.param_groups:
             group["lr"] = learning_rate(step)
@@ -159,19 +181,16 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
         patch_d = rays_d[y:y + patch_size, x:x+patch_size].reshape(-1, 3)
         patch_radii = radii[y:y+patch_size, x:x+patch_size].reshape(-1, 1)
 
-        _, _, depth = model(patch_o, patch_d, patch_radii, return_depth=True)
+        _, _, depth, opacity = model(patch_o, patch_d, patch_radii, return_depth_and_opacity=True)
         depth_patch = depth.reshape(patch_size, patch_size)
-
-        dx = depth_patch[:, 1:] - depth_patch[:, :-1]
-        dy = depth_patch[1:, :] - depth_patch[:-1, :]
-
-        depth_loss = dx.square().mean() + dy.square().mean()
+        depth_loss = depth_patch_loss(depth_patch, opacity.reshape_as(depth_patch))
 
         # 5. Compute losses
         coarse_loss = F.mse_loss(coarse_rgb, batch_rgb)
         fine_loss = F.mse_loss(fine_rgb, batch_rgb)
 
-        loss = 0.1 * coarse_loss + fine_loss + depth_weight * depth_loss
+        current_weight = scheduled_depth_weight(step, depth_weight)
+        loss = 0.1 * coarse_loss + fine_loss + current_weight * depth_loss
 
         # 6. Backpropagation
         optimizer.zero_grad()
@@ -179,6 +198,8 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
         torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
         optimizer.step()
+        if after_step is not None:
+            after_step(step, model)
 
         # 7. Print progress
         if step % PRINT_EVERY == 0:
@@ -189,6 +210,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
             print(
                 f"Step {step}/{NUM_STEPS} | "
                 f"Loss: {loss.item():.6f} | "
+                f"Depth weight: {current_weight:.4g} | "
                 f"PSNR: {psnr.item():.2f} dB"
             )
 
@@ -211,5 +233,7 @@ if __name__ == "__main__":
     parser.add_argument("--data-dir", default=DATA_DIR)
     parser.add_argument("--num-views", type=int, default=9)
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("checkpoint"))
-    parser.add_argument("--depth-weight", type=float, default=DEPTH_WEIGHT)
+    parser.add_argument("--depth-weight", type=float, default=DEPTH_WEIGHT,
+                        help="Final depth loss weight after decay. Zero disables the loss.")
+    parser.add_argument("--stop-after", type=int, help="Stop early and keep the original learning rate schedule.")
     train(**vars(parser.parse_args()))

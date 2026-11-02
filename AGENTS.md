@@ -4,11 +4,11 @@ Use ASD-STE100 for written instructions. Run commands from the project root in a
 
 ## Investigation
 
-The project studies depth smoothness with sparse camera views. The toy sphere has known depth. The paper comparison uses DTU scan 114 only. The proposed extension changes the smoothness penalty at image edges. Create notebooks only when the user requests them.
+The project studies depth smoothness with sparse camera views. The toy sphere has known depth. The current paper comparison uses DTU scan 40, the stone arch in RegNeRF Figure 3. Earlier scan 114 results refer to Buddha. Keep those results separate. The proposed extension changes the smoothness penalty at image edges. Create notebooks only when the user requests them.
 
 ## Controlled experiments
 
-- Run `python compare_depth.py` to read the protocol. Use `--run` only when a training experiment is requested. Choose a new output directory for each pair. Preserve datasets and previous checkpoints.
+- Run `python compare_depth.py` to read the protocol. Use `--run` only when a training experiment is requested. A rerun replaces checkpoints with matching names in the selected output directory. Use a new `--output-dir` to keep an earlier pair.
 - Train both conditions on views 25, 22, and 28. Use the same seed, optimizer, number of steps, ray sampling, bounds schedule, and resolution. Change only the depth weight. Keep camera patch sampling active in both runs to preserve the random sampling sequence.
 - Use the test IDs from `dtu.py`. Keep test photos and masks out of training and parameter selection. Compare checkpoints at the same step.
 - Run `python eval_dtu.py --checkpoint PATH` for each saved model. Use the same evaluation scale in both runs. The default is 2. Record the checkpoint paths, code revision and local changes, seed, depth weights, step count, scale, per-view scores, both means, and the signed difference in dB.

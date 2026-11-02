@@ -56,7 +56,7 @@ def evaluate(checkpoint, scene, scale, batch_size, device):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", required=True, type=Path)
-    parser.add_argument("--data-dir", type=Path, default=Path("data/dtu/scan114"))
+    parser.add_argument("--data-dir", type=Path, default=Path("data/dtu/scan40"))
     parser.add_argument("--scale", type=positive_int, default=2)
     parser.add_argument("--batch-size", type=positive_int, default=512)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")

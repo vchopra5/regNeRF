@@ -1,22 +1,23 @@
-"""Explain the scan 114 experiment. Pass --run to train and score both models."""
+"""Explain the scan 40 experiment. Pass --run to train and score both models."""
 
 import argparse
 from pathlib import Path
 
 import torch
 from eval_dtu import evaluate
-from train import NUM_STEPS, SCALE, SEED, train
+from train import DEPTH_DECAY_STEPS, DEPTH_WEIGHT_START, NUM_STEPS, SCALE, SEED, train
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
-    parser.add_argument("--output-dir", type=Path, default=Path("checkpoint/scan114_pair"))
+    parser.add_argument("--output-dir", type=Path, default=Path("checkpoint/scan40_pair"))
     args = parser.parse_args()
-    scene = Path("data/dtu/scan114")
-    conditions = [("off", 0.0), ("on", 0.02)]
-    print(f"Train two models on scan 114, views 25, 22, and 28. Use seed {SEED} and {NUM_STEPS} steps.")
-    print("Change only the weight of the depth smoothness loss on unseen camera patches (0 or 0.02).")
+    scene = Path("data/dtu/scan40")
+    conditions = [("off", 0.0), ("on", 0.1)]
+    print(f"Train two models on {scene.name}, views 25, 22, and 28. Use seed {SEED} and {NUM_STEPS} steps.")
+    print(f"Depth off stays at zero. Depth on decays linearly from {DEPTH_WEIGHT_START} "
+          f"to {conditions[1][1]} by step {DEPTH_DECAY_STEPS}.")
     print(f"Score the fine RGB output at scale {SCALE}. For each test photo, select the object pixels")
     print("with its mask. Compute PSNR from their RGB mean squared error. Average the 25 scores.")
     print("A positive on-minus-off difference means better foreground colour prediction on this scan.")
@@ -24,9 +25,7 @@ def main():
     if not args.run:
         print("Pass --run to start both training runs.")
         return
-    if args.output_dir.exists():
-        parser.error("Choose a new --output-dir to preserve previous experiments.")
-    args.output_dir.mkdir(parents=True)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
     scores = {}
     for name, weight in conditions:
         folder = args.output_dir / name
