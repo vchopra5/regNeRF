@@ -18,6 +18,7 @@ __pycache__/
 /data/
 
 /checkpoint/
+/instructions.md
 
 # Local notebook packages and generated review pages
 /.lab_runtime/

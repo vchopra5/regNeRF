@@ -1,11 +1,11 @@
-"""Explain the scan 40 experiment. Pass --run to train and score both models."""
+"""Compare depth smoothing on and off on DTU scan 40. Canny is off in both runs."""
 
 import argparse
 from pathlib import Path
 
 import torch
 from eval_dtu import evaluate
-from train import DEPTH_DECAY_STEPS, DEPTH_WEIGHT_START, NUM_STEPS, SCALE, SEED, add_render_settings, train
+from train import DEPTH_DECAY_STEPS, NUM_STEPS, SCALE, SEED, add_render_settings, train
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
     depth_on_weight = 0.1
     conditions = [("on", depth_on_weight), ("off", 0.0)]
     print(f"Train two models on {scene.name}, views 25, 22, and 28. Use seed {SEED} and {NUM_STEPS} steps.")
-    print(f"Run depth on first. Its weight decays linearly from {DEPTH_WEIGHT_START} "
+    print(f"Run depth on first. Its fine depth weight goes from {args.depth_weight_start} "
           f"to {depth_on_weight} by step {DEPTH_DECAY_STEPS}. Then run depth off at zero.")
     print(f"Score the fine RGB output at scale {SCALE}. For each test photo, select the object pixels")
     print("with its mask. Compute PSNR from their RGB mean squared error. Average the 25 scores.")
@@ -32,7 +32,7 @@ def main():
     for name, weight in conditions:
         folder = args.output_dir / name
         train(3, scene, folder, depth_weight=weight, background=args.background,
-              density_noise_std=args.density_noise_std)
+              density_noise_std=args.density_noise_std, depth_weight_start=args.depth_weight_start)
         scores[name] = evaluate(folder / "mipnerf_final.pt", scene, SCALE, 512,
                                 "cuda" if torch.cuda.is_available() else "cpu")
     print(f"Off {scores['off']:.3f} dB | on {scores['on']:.3f} dB | "

@@ -1,4 +1,4 @@
-"""Compare sphere depth weights and find a stopping point on validation views."""
+"""Compare sphere depth weights on held-out test views."""
 
 import argparse
 import csv
@@ -9,12 +9,13 @@ import numpy as np
 import torch
 
 from data import get_rays, load_data
+from generate_sphere import generate, scan40_rotations
 from model import MipNeRF
-from train import NUM_STEPS, SEED, train
+from train import NUM_STEPS, SCALE, SEED, add_depth_start_option, train
 
 
-def prepare_views(split, indices):
-    images, poses, focal = load_data("toy_sphere", split, scale=4)
+def prepare_views(split, indices, scene="toy_sphere"):
+    images, poses, focal = load_data(scene, split, scale=SCALE)
     h, w = images.shape[1:3]
     views = []
     for i in indices:
@@ -24,7 +25,7 @@ def prepare_views(split, indices):
 
 
 @torch.inference_mode()
-def score(model, views):
+def score(model, views, *, sphere_foreground=False):
     device = next(model.parameters()).device
     bounds = model.near, model.far
     model.near, model.far = 2., 6.
@@ -33,6 +34,12 @@ def score(model, views):
     try:
         scores = []
         for rays, target in views:
+            if sphere_foreground:
+                origins, directions, _ = rays
+                # Pixels whose camera rays intersect the unit sphere at the origin.
+                hit = ((origins * directions).sum(-1).square() >=
+                       directions.square().sum(-1) * (origins.square().sum(-1) - 1))
+                rays, target = [field[hit] for field in rays], target[hit]
             predictions = [model(*(r.to(device) for r in batch))[1].cpu()
                            for batch in zip(*(r.split(512) for r in rays))]
             mse = (torch.cat(predictions) - target).square().mean()
@@ -43,22 +50,47 @@ def score(model, views):
         model.train(was_training)
 
 
+TEST_STEP = 5000
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--stop-after", type=int, default=NUM_STEPS,
+    add_depth_start_option(parser, default=None)
+    parser.add_argument("--dtu-views", "--nearby-views", dest="dtu_views", action="store_true",
+                        help="Use the three training and 25 test camera angles from DTU scan 40.")
+    parser.add_argument("--varied-distances", action="store_true",
+                        help="Use training camera distances of 3.6, 4.0, and 4.4 scene units.")
+    parser.add_argument("--stop-after", type=int,
                         help="Last training step. Keep the full learning rate schedule.")
     args = parser.parse_args()
+    test_step = (args.stop_after or TEST_STEP) if args.dtu_views else TEST_STEP
+    if args.stop_after is None:
+        args.stop_after = test_step
+    fine_weight = 0.1
+    start_weight = fine_weight if args.depth_weight_start is None else args.depth_weight_start
     if not 1 <= args.stop_after <= NUM_STEPS:
         parser.error(f"--stop-after must be between 1 and {NUM_STEPS}")
     output = Path("checkpoint") / ("sphere_demo_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
     output.mkdir(parents=True)
-    selected = np.random.default_rng(SEED).choice(12, 3, replace=False)
-    validation = prepare_views("train", sorted(set(range(12)) - set(selected)))
+    scene = Path("toy_sphere")
+    if args.dtu_views:
+        scene = output / "sphere_dtu_views"
+        rotations = scan40_rotations(Path("data/dtu/scan40"))
+        generate(scene, train_distances=(3.6, 4.0, 4.4), rotations=rotations, radius=1.0,
+                 image_size=(1600, 1200))
+    elif args.varied_distances:
+        scene = output / "sphere_varied_distances"
+        generate(scene, train_distances=(3.6, 4.0, 4.4))
+    if args.dtu_views:
+        validation = prepare_views("val", range(len(rotations["val"])), scene)
+    else:
+        selected = np.random.default_rng(SEED).choice(12, 3, replace=False)
+        validation = prepare_views("train", sorted(set(range(12)) - set(selected)), scene)
     steps = {10, 25, 50, 75, 100, 150, 200, 300, 400}
     steps.update(range(500, NUM_STEPS + 1, 500))
     steps = {s for s in steps if s <= args.stop_after} | {args.stop_after}
     curves = {}
-    for name, weight in (("off", 0.), ("on", 0.1)):
+    for name, weight in (("off", 0.), ("on", fine_weight)):
         folder = output / name
         curves[name] = {}
 
@@ -68,7 +100,8 @@ def main():
                 torch.save(model.state_dict(), folder / f"demo_{step}.pt")
                 print(name, step, curves[name][step], flush=True)
 
-        train(3, "toy_sphere", folder, weight, stop_after=args.stop_after, after_step=measure)
+        train(3, scene, folder, weight, stop_after=args.stop_after, after_step=measure,
+              regnerf_density=True, use_all_synthetic_poses=True, depth_weight_start=start_weight)
 
     with (output / "validation.csv").open("w", newline="") as stream:
         writer = csv.writer(stream)
@@ -76,13 +109,17 @@ def main():
         for step in sorted(steps):
             off, on = (curves[key][step] for key in ("off", "on"))
             writer.writerow([step, off, on, on - off])
-    best = max(sorted(steps), key=lambda s: curves["on"][s] - curves["off"][s])
-    test = prepare_views("test", range(4))
+    if args.stop_after < test_step:
+        print(f"Stopped before step {test_step}. Validation results: {output}")
+        return
+    test = prepare_views("test", range(len(rotations["test"]) if args.dtu_views else 4), scene)
     model = MipNeRF().to("cuda" if torch.cuda.is_available() else "cpu")
     for name in ("off", "on"):
-        model.load_state_dict(torch.load(output / name / f"demo_{best}.pt", weights_only=True,
+        model.load_state_dict(torch.load(output / name / f"demo_{test_step}.pt", weights_only=True,
                                          map_location="cpu"))
-        print("Test", name, best, score(model, test))
+        print(f"Depth {name} at step {test_step} | test {score(model, test):.3f} dB")
+        if args.dtu_views:
+            print(f"Mean foreground PSNR (25 test views): {score(model, test, sphere_foreground=True):.3f} dB")
     print("Results:", output)
 
 
