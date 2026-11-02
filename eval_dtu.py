@@ -15,7 +15,7 @@ from render import positive_int
 
 
 @torch.inference_mode()
-def evaluate(checkpoint, scene, scale, batch_size, device):
+def evaluate(checkpoint, scene, scale, batch_size, device, *, return_per_view=False):
     model = MipNeRF(near=dtu.BOUNDS[0], far=dtu.BOUNDS[1])
     saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
     model.load_state_dict(saved.get("model", saved))
@@ -50,6 +50,8 @@ def evaluate(checkpoint, scene, scale, batch_size, device):
             print(f"View {index:02} | {count} foreground pixels | {score:.3f} dB", flush=True)
     mean = sum(scores) / len(scores)
     print(f"Mean foreground PSNR ({len(scores)} test views): {mean:.3f} dB", flush=True)
+    if return_per_view:
+        return mean, dict(zip(dtu.TEST_IDS, scores))
     return mean
 
 

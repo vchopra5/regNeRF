@@ -18,3 +18,8 @@ __pycache__/
 /data/
 
 /checkpoint/
+
+# Local notebook packages and generated review pages
+/.lab_runtime/
+/notebooks/__marimo__/
+/notebooks/exports/

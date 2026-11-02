@@ -1,12 +1,13 @@
 
 import argparse
 import math
+from contextlib import contextmanager
 from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 
-from data import load_data, get_rays
+from data import get_rays, load_data, pixel_rays
 from model import MipNeRF
 import numpy as np
 import dtu
@@ -14,8 +15,11 @@ import dtu
 # Settings
 DATA_DIR = "nerf_synthetic/chair"
 SCALE = 4
-BATCH_SIZE = 512
-NUM_STEPS = 44_000
+BATCH_SIZE = 1024
+DEPTH_RAYS = 1024
+PATCH_SIZE = 8
+RAYS_PER_CHUNK = 4096
+NUM_STEPS = 20_000
 SEED = 42
 LR_INIT = 2e-3
 LR_FINAL = 2e-5
@@ -23,7 +27,7 @@ LR_DELAY_STEPS = 512
 LR_DELAY_MULT = 0.01
 BOUND_STEPS = 256
 INITIAL_RANGE_FRACTION = 0.5
-PRINT_EVERY = 100
+PRINT_EVERY = 1_000
 SAVE_EVERY = 5_000
 DEPTH_WEIGHT = 0.1
 DEPTH_WEIGHT_START = 400.0
@@ -59,8 +63,22 @@ def learning_rate(step):
     return multiplier * LR_INIT * (LR_FINAL / LR_INIT) ** progress
 
 
+@contextmanager
+def training_matmul_precision():
+    if not torch.cuda.is_available():
+        yield
+        return
+    previous = torch.get_float32_matmul_precision()
+    torch.set_float32_matmul_precision("high")
+    try:
+        yield
+    finally:
+        torch.set_float32_matmul_precision(previous)
+
+
+@training_matmul_precision()
 def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), depth_weight=DEPTH_WEIGHT,
-          stop_after=None, after_step=None):
+          stop_after=None, after_step=None, background=None, density_noise_std=None):
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(SEED)
     rng = np.random.default_rng(SEED)
@@ -86,32 +104,47 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     train_indices = np.arange(num_views) if is_dtu else rng.choice(N, size=num_views, replace=False)
 
     poses = poses.to(device)
-    # In case of RegNeRF, calculate camera position to add for depth loss
-    train_poses = poses[train_indices]
-    origins = train_poses[:, :3, 3]
-    forward = -train_poses[:, :3, 2]
-    box_min = origins.amin(dim=0)
-    box_max = origins.amax(dim=0)
-    up_ref = F.normalize(train_poses[:, :3, 1].mean(dim=0), dim=0)
+    # Training cameras are fixed. Cache only the selected views.
+    rgb_views = {}
+    for index in train_indices:
+        intrinsics = focal[index] if is_dtu else focal
+        fields = get_rays(H, W, intrinsics, poses[index])
+        rgb_views[index] = (images[index].reshape(-1, 3).to(device),
+                            tuple(field.reshape(-1, field.shape[-1]) for field in fields))
+    if depth_weight != 0:
+        depth_rng = torch.Generator(device=device).manual_seed(SEED + 1)
+        # In case of RegNeRF, calculate camera position to add for depth loss
+        sampling_poses = dtu.load_rig_poses(Path(data_dir)).to(device) if is_dtu else poses[train_indices]
+        origins = sampling_poses[:, :3, 3]
+        forward = -sampling_poses[:, :3, 2]
+        box_min = origins.amin(dim=0)
+        box_max = origins.amax(dim=0)
+        up_ref = F.normalize(sampling_poses[:, :3, 1].mean(dim=0), dim=0)
 
-    eye = torch.eye(3, device=poses.device, dtype=poses.dtype)
-    P = eye - forward[:, :, None] * forward[:, None, :]
+        eye = torch.eye(3, device=poses.device, dtype=poses.dtype)
+        P = eye - forward[:, :, None] * forward[:, None, :]
 
-    A = P.reshape(-1, 3)
-    b = (P @ origins.unsqueeze(-1)).reshape(-1)
+        A = P.reshape(-1, 3)
+        b = (P @ origins.unsqueeze(-1)).reshape(-1)
 
-    focus = torch.linalg.lstsq(A, b).solution
-
+        focus = torch.linalg.lstsq(A, b).solution
 
     print("Images:", images.shape)
     print("Focal:", focal)
 
     # 2. Initialize model and optimizer
-    model = (MipNeRF(near=dtu.BOUNDS[0], far=dtu.BOUNDS[1]) if is_dtu else MipNeRF()).to(device)
+    if background is None:
+        background = "black" if is_dtu else "white"
+    if density_noise_std is None:
+        density_noise_std = 1.0 if is_dtu else 0.0
+    near, far = dtu.BOUNDS if is_dtu else (2.0, 6.0)
+    model = MipNeRF(near=near, far=far, background=background,
+                    density_noise_std=density_noise_std, regnerf_density=is_dtu).to(device)
+    print(f"Background: {background} | Training density noise std: {density_noise_std:g}")
     full_near, full_far = model.near, model.far
     optimizer = torch.optim.Adam(
         model.parameters(),
-        lr=learning_rate(0)
+        lr=learning_rate(0), fused=device.type == "cuda"
     )
 
 
@@ -129,72 +162,57 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
         # Choose a random training image
         image_idx = int(rng.choice(train_indices))
 
-        pose = poses[image_idx]
         ray_intrinsics = focal[image_idx] if is_dtu else focal
+        targets, fields = rgb_views[image_idx]
+        indices = torch.randint(H * W, (BATCH_SIZE,)).to(device, non_blocking=True)
+        batch_rgb = targets[indices]
+        rgb_rays = tuple(field[indices] for field in fields)
 
-        # Generate all rays for this camera
-        rays_o, rays_d, radii = get_rays(
-            H, W, ray_intrinsics, pose
-        )
-
-        # Flatten image into pixels and rays
-        rays_o = rays_o.reshape(-1, 3)
-        rays_d = rays_d.reshape(-1, 3)
-        radii = radii.reshape(-1, 1)
-
-        target_rgb = images[image_idx].reshape(-1, 3)
-
-        # Choose a random batch of pixels
-        indices = torch.randint(
-            H * W, (BATCH_SIZE,)
-        )
-
-        batch_o = rays_o[indices.to(device)]
-        batch_d = rays_d[indices.to(device)]
-        batch_radii = radii[indices.to(device)]
-        batch_rgb = target_rgb[indices].to(device)
-
-        # 4. Forward pass
-        coarse_rgb, fine_rgb = model(
-            batch_o, batch_d, batch_radii
-        )
-
-        # In case of RegNeRF (sparse losses), calculate new camera angles for depth loss
-
-        position = box_min + torch.rand_like(box_min) * (box_max - box_min)
-        back = F.normalize(position - focus, dim=0)
-        right = F.normalize(torch.linalg.cross(up_ref, back), dim=0)
-        up = torch.linalg.cross(back, right)
-
-        unseen_pose = eye.new_zeros((4, 4))
-        unseen_pose[:3, :3] = torch.stack((right, up, back), dim=1)
-        unseen_pose[:3, 3] = position
-        unseen_pose[3, 3] = 1
-
-        patch_size = 8
-        rays_o, rays_d, radii = get_rays(H, W, ray_intrinsics, unseen_pose)
-
-        y = torch.randint(0, H - patch_size + 1, ()).item()
-        x = torch.randint(0, W - patch_size + 1, ()).item()
-
-        patch_o = rays_o[y:y + patch_size, x:x+patch_size].reshape(-1, 3)
-        patch_d = rays_d[y:y + patch_size, x:x+patch_size].reshape(-1, 3)
-        patch_radii = radii[y:y+patch_size, x:x+patch_size].reshape(-1, 1)
-
-        _, _, depth, opacity = model(patch_o, patch_d, patch_radii, return_depth_and_opacity=True)
-        depth_patch = depth.reshape(patch_size, patch_size)
-        depth_loss = depth_patch_loss(depth_patch, opacity.reshape_as(depth_patch))
-
-        # 5. Compute losses
-        coarse_loss = F.mse_loss(coarse_rgb, batch_rgb)
-        fine_loss = F.mse_loss(fine_rgb, batch_rgb)
+        # Accumulate the full batch gradient before clipping and updating the model.
+        optimizer.zero_grad()
+        loss = torch.zeros((), device=device)
+        fine_mse = torch.zeros_like(loss)
+        for start in range(0, BATCH_SIZE, RAYS_PER_CHUNK):
+            chunk = slice(start, start + RAYS_PER_CHUNK)
+            coarse_rgb, fine_rgb = model(*(ray[chunk] for ray in rgb_rays))
+            coarse_loss = (coarse_rgb - batch_rgb[chunk]).square().sum() / BATCH_SIZE
+            fine_loss = (fine_rgb - batch_rgb[chunk]).square().sum() / BATCH_SIZE
+            rgb_loss = 0.1 * coarse_loss + fine_loss
+            rgb_loss.backward()
+            loss += rgb_loss.detach()
+            fine_mse += fine_loss.detach() / 3
 
         current_weight = scheduled_depth_weight(step, depth_weight)
-        loss = 0.1 * coarse_loss + fine_loss + current_weight * depth_loss
+        if depth_weight != 0:
+            # Sample one virtual camera and one contiguous pixel patch per patch index.
+            patch_area = PATCH_SIZE ** 2
+            patch_count = DEPTH_RAYS // patch_area
+            positions = box_min + torch.rand(patch_count, 3, device=device, generator=depth_rng) * (box_max - box_min)
+            back = F.normalize(positions - focus, dim=-1)
+            right = F.normalize(torch.linalg.cross(up_ref.expand_as(back), back), dim=-1)
+            up = torch.linalg.cross(back, right)
+            rotations = torch.stack((right, up, back), dim=-1)
+            patch_poses = torch.cat((rotations, positions.unsqueeze(-1)), dim=-1)
 
-        # 6. Backpropagation
-        optimizer.zero_grad()
-        loss.backward()
+            offsets = torch.arange(patch_area, device=device)
+            x = torch.randint(W - PATCH_SIZE + 1, (patch_count, 1), device=device, generator=depth_rng) + offsets % PATCH_SIZE
+            y = torch.randint(H - PATCH_SIZE + 1, (patch_count, 1), device=device, generator=depth_rng) + offsets // PATCH_SIZE
+            patch_rays = pixel_rays(H, W, ray_intrinsics, patch_poses, x, y)
+
+            patches_per_chunk = RAYS_PER_CHUNK // patch_area
+            for start in range(0, patch_count, patches_per_chunk):
+                chunk = slice(start, start + patches_per_chunk)
+                rays = [ray[chunk].flatten(0, 1) for ray in patch_rays]
+                levels = model(*rays, return_depth_levels=True, generator=depth_rng)
+                chunk_fraction = rays[0].shape[0] / DEPTH_RAYS
+                depth_loss = loss.new_zeros(())
+                for (depth, opacity), weight in zip(levels, (0.1, current_weight)):
+                    depth = depth.reshape(-1, PATCH_SIZE, PATCH_SIZE)
+                    depth_loss += weight * depth_patch_loss(depth, opacity.reshape_as(depth))
+                depth_loss = depth_loss * chunk_fraction
+                depth_loss.backward()
+                loss += depth_loss.detach()
+
         torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
         optimizer.step()
@@ -204,7 +222,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
         # 7. Print progress
         if step % PRINT_EVERY == 0:
             psnr = -10.0 * torch.log10(
-                fine_loss.detach().clamp_min(1e-10)
+                fine_mse.clamp_min(1e-10)
             )
 
             print(
@@ -228,8 +246,16 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     print("Training complete!")
 
 
+def add_render_settings(parser):
+    parser.add_argument("--background", choices=("black", "white"),
+                        help="Background for unoccupied rays. DTU uses black. Other scenes use white.")
+    parser.add_argument("--density-noise-std", type=float,
+                        help="Training noise on raw density. DTU uses 1. Other scenes use 0.")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    add_render_settings(parser)
     parser.add_argument("--data-dir", default=DATA_DIR)
     parser.add_argument("--num-views", type=int, default=9)
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("checkpoint"))

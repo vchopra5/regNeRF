@@ -19,11 +19,7 @@ def view_ids(split):
     raise ValueError("Use the train or test split for DTU.")
 
 
-def camera(archive, index, size, scale):
-    width, height = size
-    w, h = width // scale, height // scale
-    if min(w, h) < 1:
-        raise ValueError("The scale is too large for this image.")
+def _calibration(archive, index):
     projection = (archive[f"world_mat_{index}"].astype(np.float64)
                   @ archive[f"scale_mat_{index}"])[:3]
     m = projection[:, :3]
@@ -36,11 +32,25 @@ def camera(archive, index, size, scale):
     pose = np.eye(4)
     pose[:3, 3] = np.linalg.solve(m, -projection[:, 3])
     pose[:3, :3] = rotation.T @ np.diag([1., -1., -1.])
+    return k, torch.tensor(pose, dtype=torch.float32)
+
+
+def load_rig_poses(scene):
+    with np.load(scene / "cameras.npz") as archive:
+        return torch.stack([_calibration(archive, i)[1] for i in range(49)])
+
+
+def camera(archive, index, size, scale):
+    width, height = size
+    w, h = width // scale, height // scale
+    if min(w, h) < 1:
+        raise ValueError("The scale is too large for this image.")
+    k, pose = _calibration(archive, index)
     sx, sy = w / width, h / height
     # DTU indexes pixel centres at integers. get_rays uses half-integers.
     intrinsics = (sx*k[0, 0], sy*k[1, 1], sx*(k[0, 2]+0.5),
                   sy*(k[1, 2]+0.5), sx*k[0, 1])
-    return h, w, intrinsics, torch.tensor(pose, dtype=torch.float32)
+    return h, w, intrinsics, pose
 
 
 def load_views(scene, split, scale):

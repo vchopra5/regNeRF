@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -103,6 +105,9 @@ def volume_render(rgb, density, t_vals, rays_d, white_bkgd=True):
 
     weights = alpha * transmittance
 
+    if rgb is None:
+        return None, weights
+
     rgb_map = torch.sum(
         weights[..., None] * rgb,
         dim = -2
@@ -116,7 +121,7 @@ def volume_render(rgb, density, t_vals, rays_d, white_bkgd=True):
 
     return rgb_map, weights
 
-def resample_intervals(t_vals, weights, N=64, randomized=True):
+def resample_intervals(t_vals, weights, N=64, randomized=True, generator=None):
     """
     t_vals:  [B, M+1] coarse interval boundaries
     weights: [B, M]   coarse rendering weights
@@ -163,7 +168,7 @@ def resample_intervals(t_vals, weights, N=64, randomized=True):
             )[None, :]
             + torch.rand(
                 t_vals.shape[0], N + 1,
-                device=t_vals.device,
+                device=t_vals.device, generator=generator,
                 dtype=t_vals.dtype
             )
         ) / (N + 1)
@@ -222,7 +227,8 @@ class MipNeRFMLP(nn.Module):
         self.color_head = nn.Linear(128, 3)
 
 
-    def forward(self, encoded, viewdirs):
+    def forward(self, encoded, viewdirs, density_noise_std=0.0, generator=None,
+                regnerf_density=False):
 
         x = encoded
 
@@ -232,7 +238,15 @@ class MipNeRFMLP(nn.Module):
 
             x = F.relu(layer(x))
 
-        density = F.softplus(self.density_head(x))
+        raw_density = self.density_head(x)
+        if self.training and density_noise_std:
+            noise_shape = () if regnerf_density else raw_density.shape
+            noise = torch.randn(noise_shape, device=x.device, dtype=raw_density.dtype,
+                                generator=generator)
+            raw_density = raw_density + density_noise_std * noise
+        density = F.softplus(raw_density - 1.0 if regnerf_density else raw_density)
+        if viewdirs is None:
+            return None, density
 
         features = self.feature_head(x)
 
@@ -253,18 +267,48 @@ class MipNeRFMLP(nn.Module):
 
 
 
+def ray_depth(weights, intervals):
+    midpoints = 0.5 * (intervals[..., :-1] + intervals[..., 1:])
+    opacity = weights.sum(dim=-1)
+    depth = (weights * midpoints).sum(dim=-1) / opacity.clamp_min(torch.finfo(weights.dtype).eps)
+    return depth.clamp(min=intervals[..., 0], max=intervals[..., -1]), opacity
+
+
 class MipNeRF(nn.Module):
-    def __init__(self, num_samples=64, near=2.0, far=6.0):
+    def __init__(self, num_samples=64, near=2.0, far=6.0, background="white", density_noise_std=0.0,
+                 regnerf_density=False):
         super().__init__()
 
         self.num_samples = num_samples
         self.near = near
         self.far = far
+        self.set_extra_state({"background": background, "density_noise_std": density_noise_std,
+                              "regnerf_density": regnerf_density})
 
         # Shared by coarse and fine passes
         self.mlp = MipNeRFMLP()
 
-    def render_pass(self, rays_o, rays_d, radii, t_vals):
+    def get_extra_state(self):
+        return {"background": self.background, "density_noise_std": self.density_noise_std,
+                "regnerf_density": self.regnerf_density}
+
+    def set_extra_state(self, state):
+        background = state["background"]
+        noise = state["density_noise_std"]
+        if background not in ("white", "black"):
+            raise ValueError("Use white or black for the background.")
+        if not math.isfinite(noise) or noise < 0:
+            raise ValueError("Density noise must be finite and nonnegative.")
+        self.background = background
+        self.density_noise_std = noise
+        self.regnerf_density = state.get("regnerf_density", False)
+
+    def _load_from_state_dict(self, state_dict, prefix, *args):
+        # Earlier checkpoints always used white and had no density noise.
+        state_dict.setdefault(prefix + "_extra_state", {"background": "white", "density_noise_std": 0.0})
+        super()._load_from_state_dict(state_dict, prefix, *args)
+
+    def render_pass(self, rays_o, rays_d, radii, t_vals, generator=None, depth_only=False):
         # Convert cone sections into Gaussians
         means, covs = conical_frustum_to_gaussian(
             rays_o, rays_d, t_vals, radii
@@ -276,16 +320,19 @@ class MipNeRF(nn.Module):
         )
 
         # Predict RGB and density
-        rgb, density = self.mlp(encoded, rays_d)
+        viewdirs = None if depth_only else rays_d
+        rgb, density = self.mlp(encoded, viewdirs, self.density_noise_std, generator,
+                                self.regnerf_density)
 
         # Combine samples into pixel colors
         rgb_map, weights = volume_render(
-            rgb, density, t_vals, rays_d
+            rgb, density, t_vals, rays_d, white_bkgd=self.background == "white"
         )
 
         return rgb_map, weights
 
-    def forward(self, rays_o, rays_d, radii, return_depth=False, *, return_depth_and_opacity=False):
+    def forward(self, rays_o, rays_d, radii, return_depth=False, *, return_depth_and_opacity=False,
+                return_depth_levels=False, generator=None):
         # Expect a batch of flattened rays
         # rays_o: [B, 3]
         # rays_d: [B, 3]
@@ -305,7 +352,7 @@ class MipNeRF(nn.Module):
 
         # 2. Coarse rendering
         coarse_rgb, coarse_weights = self.render_pass(
-            rays_o, rays_d, radii, t_coarse
+            rays_o, rays_d, radii, t_coarse, generator, depth_only=return_depth_levels
         )
 
         # 3. Fine sampling
@@ -313,20 +360,18 @@ class MipNeRF(nn.Module):
             t_coarse,
             coarse_weights,
             N=self.num_samples,
-            randomized=self.training
+            randomized=self.training, generator=generator
         )
 
         # 4. Fine rendering (same MLP)
         fine_rgb, fine_weights = self.render_pass(
-            rays_o, rays_d, radii, t_fine
+            rays_o, rays_d, radii, t_fine, generator, depth_only=return_depth_levels
         )
 
+        if return_depth_levels:
+            return ray_depth(coarse_weights, t_coarse), ray_depth(fine_weights, t_fine)
         if return_depth or return_depth_and_opacity:
-            midpoints = 0.5*(t_fine[..., :-1] + t_fine[..., 1:])
-            opacity = fine_weights.sum(dim=-1)
-            weighted_depth = (fine_weights * midpoints).sum(dim=-1)
-            fine_depth = weighted_depth / opacity.clamp_min(torch.finfo(torch.float32).eps)
-            fine_depth = fine_depth.clamp(min=t_fine[..., 0], max=t_fine[..., -1])
+            fine_depth, opacity = ray_depth(fine_weights, t_fine)
             if return_depth_and_opacity:
                 return coarse_rgb, fine_rgb, fine_depth, opacity
             return coarse_rgb, fine_rgb, fine_depth

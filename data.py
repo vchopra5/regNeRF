@@ -13,6 +13,10 @@ def get_rays(H, W, focal, pose):
         indexing="xy"
     )
 
+    return pixel_rays(H, W, focal, pose, x, y)
+
+
+def pixel_rays(H, W, focal, pose, x, y):
     fx, fy, cx, cy, skew = (focal if isinstance(focal, tuple)
                              else (focal, focal, W / 2, H / 2, 0.0))
     y_cam = (y + 0.5 - cy) / fy
@@ -22,11 +26,11 @@ def get_rays(H, W, focal, pose):
         -torch.ones_like(x)
     ], dim=-1)
 
-    rays_d = directions@pose[:3, :3].T
+    rays_d = directions @ pose[..., :3, :3].transpose(-1, -2)
 
-    rays_o = pose[:3, 3].expand_as(rays_d)
+    rays_o = pose[..., :3, 3].unsqueeze(-2).expand_as(rays_d)
 
-    radii = torch.full((H, W, 1), 2 / (fx*np.sqrt(12)), dtype=pose.dtype, device=pose.device)
+    radii = torch.full_like(rays_d[..., :1], 2 / (fx*np.sqrt(12)))
 
     return rays_o, rays_d, radii
 
