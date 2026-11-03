@@ -8,6 +8,8 @@ from PIL import Image
 
 ASSETS = Path(__file__).resolve().parent / "assets" / "two_spheres"
 TOY_SEED = 42
+# Repeat seeds for the saved runs. Images are saved for TOY_SEED only; scores for every seed.
+TOY_SEEDS = (42, 142, 242, 342, 442)
 CAMERAS = {"Front view": (15, 5), "Lower view": (15, -15)}
 
 
@@ -22,6 +24,18 @@ def saved_asset_names():
         names += [f"{condition}/{name}" for name in ("rgb.png", "prediction.npz", "result.json")]
         names += [f"lower/{condition}/{name}" for name in ("rgb.png", "prediction.npz", "result.json")]
     names += ["lower/reference.png", "lower/reference.npz"]
+    names += [f"seeds/{name}" for name in seed_record_names()]
+    return names
+
+
+def seed_record_names():
+    """List the score records saved for every repeat seed."""
+    names = []
+    for seed in TOY_SEEDS:
+        for count in (3, 9, 20):
+            names.append(f"{seed}/coverage_500/{count}/result.json")
+        for condition in ("off", "on", "off_100", "on_100", "off_1000", "on_1000"):
+            names += [f"{seed}/{condition}/result.json", f"{seed}/lower/{condition}/result.json"]
     return names
 
 
@@ -70,7 +84,7 @@ def prepare_scene(output=ASSETS, extra_angles=()):
     np.savez_compressed(output / "reference.npz", depth=depth[::2, ::2].astype("float32"), ids=ids[::2, ::2])
 
 
-def run_condition(folder, steps, weight, training_scene=ASSETS, stratified=True):
+def run_condition(folder, steps, weight, training_scene=ASSETS, stratified=True, seed=TOY_SEED):
     import torch
     import train as training
     from provenance import file_hashes, git
@@ -80,13 +94,13 @@ def run_condition(folder, steps, weight, training_scene=ASSETS, stratified=True)
     sources = ("train.py", "model.py", "data.py", "two_spheres.py", "notebooks/toy_experiment.py", "provenance.py")
     provenance = dict(code_revision=git("rev-parse", "HEAD"), local_changes=git("diff", "HEAD", "--", *sources),
                       code_sha256=file_hashes(sources),
-                      seed=TOY_SEED, stratified=stratified, evaluation_scale=2,
+                      seed=seed, stratified=stratified, evaluation_scale=2,
                       heldout_camera=dict(angle=15, elevation=5),
                       coarse_weight=0.1 if weight else 0.0, views=views,
                       training_transforms=json.loads((training_scene / "transforms_train.json").read_text()),
                       checkpoint=str((folder / "mipnerf_final.pt").resolve()))
     training.train(views, training_scene, folder, depth_weight=weight, depth_weight_start=weight,
-          stop_after=steps, scale=2, regnerf_density=True, seed=TOY_SEED, stratified=stratified)
+          stop_after=steps, scale=2, regnerf_density=True, seed=seed, stratified=stratified)
     train_seconds = perf_counter() - start
     result = dict(steps=steps, fine_weight=weight, training_seconds=train_seconds,
                   device="cuda" if torch.cuda.is_available() else "cpu", **provenance)

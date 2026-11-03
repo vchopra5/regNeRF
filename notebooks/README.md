@@ -10,9 +10,9 @@ Use the notebooks in order. Allow one hour for the team review.
 | Discussion | 5 min | State the result, its limit, and the next test. |
 
 Each notebook has a question, a prediction, evidence, and discussion prompts.
-The first notebook uses saved two-sphere results. The camera and shape sections use the same three-photo baseline at 500 steps. The final experiment compares smoothing off and on at 100, 300, and 1,000 steps. Select the lower or front camera in the final section. Each view has its own reference and scores. The lower view shows the curved stripe more clearly. It was chosen after inspecting the images, so it is an additional illustration rather than an independent test.
+The first notebook uses saved two-sphere results. Every saved run was trained with 5 seeds (42, 142, 242, 342, 442) and coarse jitter. The images show seed 42; the scores cover all 5 seeds. The camera and shape sections use the same three-photo baseline at 500 steps. The final experiment compares smoothing off and on at 100, 300, and 1,000 steps. Select the lower or front camera in the final section. Each view has its own reference and scores. The lower view shows the curved stripe more clearly. It was chosen after inspecting the images, so it is an additional illustration rather than an independent test.
 
-Select **Run comparison** to submit optional training. The default is a fine depth weight of 0.05 at 300 steps. The slider covers 0 to 0.10. Positive fine weights also enable the coarse weight of 0.10; zero disables both depth terms. Submission reuses matching results or trains the requested condition and any missing baseline. New runs save checkpoints, RGB, depth, scores, and code records under `checkpoint/toy_two_spheres_student_v3`. Every custom run passes seed 42 explicitly to the trainer. Model initialization, view sampling, and RGB ray sampling reset to this seed. A separate generator uses seed 43 for depth patches. Cache reuse requires the same seed, weight, and step count. One training run saves renders for both cameras, so changing camera reuses the same model. The third notebook solves a small depth problem.
+Select **Run comparison** to submit optional training. The default is a fine depth weight of 0.05 at 300 steps. The slider covers 0 to 0.10. Positive fine weights also enable the coarse weight of 0.10; zero disables both depth terms. Submission reuses matching results or trains the requested condition and any missing baseline. New runs save checkpoints, RGB, depth, scores, and code records under `checkpoint/toy_two_spheres_student_v3`. Every custom run passes seed 42 explicitly to the trainer. Model initialization, view sampling, and RGB ray sampling reset to this seed. A separate generator uses seed 43 for depth patches. Cache reuse requires the same seed, weight, step count, and coarse jitter setting. One training run saves renders for both cameras, so changing camera reuses the same model. The third notebook solves a small depth problem.
 
 **Open these figures if you cannot run Notebook 1.**
 
@@ -20,7 +20,7 @@ Select **Run comparison** to submit optional training. The default is a fine dep
 2. [Move the camera](toy_figures/camera_shift.png), then inspect [all three surface strips](toy_figures/shape_presets.png).
 3. Compare [simulated one-dimensional fits](toy_figures/curve_settings.png) with smoothing 0, 4, and 256.
 4. Compare [one moved pixel](toy_figures/one_pixel.png) with a [moved whole patch](toy_figures/whole_patch.png), both at 0.10 units. The loss values and four neighbour contributions appear in each figure.
-5. Compare [saved training at all three step counts](toy_figures/training_stages.png). In the lower view, smoothing changes foreground RGB PSNR by -0.06, +1.39, and +0.61 dB at 100, 300, and 1,000 steps. In the front view, the changes are -0.05, +1.14, and +0.78 dB. Both views show a slight decline at 100 steps.
+5. Compare [saved training at all three step counts](toy_figures/training_stages.png) (seed 42). Over 5 seeds, smoothing lowers the depth MAE at 300 steps by about 0.02, or 11–12% (in 4 of 5 seeds in the front view and 5 of 5 in the lower view). At 1,000 steps it lowers the depth MAE by about 0.006, in 4 of 5 seeds in each view. At 100 steps it makes no real difference. Its effect on foreground RGB PSNR varies widely: at 300 steps the mean change is +0.60 dB (front) and +0.84 dB (lower), and single seeds range from -0.45 to +2.27 dB. Seed 42 is the least favourable seed at 300 steps.
 
 The paper notebook reads saved images and an evaluation record. It shows a clear
 missing-result message until that record exists. Opening a notebook does not start training.
@@ -44,7 +44,7 @@ The saved lesson needs marimo, NumPy, and Pillow. Install PyTorch in the same en
 python -m pip install torch
 ```
 
-The trainer uses CUDA when a compatible GPU and PyTorch installation are available. Otherwise, it uses the CPU. For 300 steps, allow about 20 minutes per model with four CPU threads. This is an estimate from a short timing test.
+The trainer uses CUDA when a compatible GPU and PyTorch installation are available. Otherwise, it uses the CPU. For 300 steps, allow about 16 minutes per model with four CPU threads. This is an estimate from a short timing test.
 
 Open the other notebooks with `python -m marimo edit notebooks/02_paper.py` or `python -m marimo edit notebooks/03_extension.py`, with the repository root on `PYTHONPATH`. Their data requirements are separate from the toy lesson.
 
@@ -65,9 +65,9 @@ python -m marimo export html notebooks/01_toy.py --no-include-code -o notebooks/
 
 Keep the repository root on `PYTHONPATH` when you call marimo directly. In PowerShell, use `$env:PYTHONPATH = "$PWD"`. In a POSIX shell, use `export PYTHONPATH="$PWD"`.
 
-The [HTML preview](exports/01_toy.html) shows the default lesson and contains a static comparison gallery. Its controls do not calculate or train. Use the Python source in marimo for live controls and editable code. Saved controls usually take less than one second after the first load. The recorded 300-step GPU runs took 8–11 seconds per model, including rendering and scoring. The CPU estimate is about 20 minutes per model at 300 steps with four threads. A 12-step CPU test measured 3.54 seconds per step, plus about 20 seconds per camera for rendering and scoring. Extrapolation gives 18 minutes; the displayed estimate rounds this to 20 minutes. Hardware and other work can change the time. See [the timing record](results/toy_cpu_timing.json).
+The [HTML preview](exports/01_toy.html) shows the default lesson and contains a static comparison gallery. Its controls do not calculate or train. Use the Python source in marimo for live controls and editable code. Saved controls usually take less than one second after the first load. On the laptop GPU used for the saved runs (RTX 4070 Laptop), 300-step training took about 23 seconds with smoothing off and 44 seconds with it on, plus about 2 seconds for rendering and scoring. Older records from a different setup show 8–11 seconds. The CPU estimate is about 16 minutes per model at 300 steps with four threads and smoothing on. A 12-step CPU test measured 3.05 seconds per step, plus about 17 seconds per camera for rendering and scoring. Extrapolation gives 15.8 minutes. Hardware and other work can change the time. See [the timing record](results/toy_cpu_timing.json).
 
-To measure this on another CPU, run `python -m notebooks.benchmark_toy_cpu --steps 12 --threads 4 --target 300`. This command starts a short training test in a new ignored output folder. It does not replace saved lesson results.
+To measure this on another CPU, run `python -m notebooks.benchmark_toy_cpu --steps 12 --threads 4 --target 300`. This command starts a short training test in a new ignored output folder and updates the timing record. It does not change the saved lesson results.
 
 ## Prepare the paper evidence
 
@@ -100,4 +100,4 @@ the effect of an edge penalty in a trained NeRF.
 The controls follow [marimo's input API](https://docs.marimo.io/api/inputs/).
 The source code is visible in each notebook for the team to inspect.
 
-To rebuild the lower-view saved images from the original checkpoints, run `python -m notebooks.render_toy_views`, then `python -m notebooks.package_toy_results`. This step needs the local original checkpoints. Students use the archive and do not need those checkpoints.
+To retrain every saved run with the current code, run `python -m notebooks.build_toy_results --checkpoint-root checkpoint/NEW_FOLDER --seeds 42 142 242 342 442`, then `python -m notebooks.package_toy_results`. One seed takes about 7 minutes on the GPU above. Check and update the result text in `01_toy.py` and this file afterwards. Students use the archive and do not need the checkpoints.

@@ -15,7 +15,7 @@ def _():
     from PIL import Image
 
     from notebooks.lab import solve_depth
-    from notebooks.toy_experiment import TOY_SEED, ensure_assets
+    from notebooks.toy_experiment import TOY_SEED, TOY_SEEDS, ensure_assets
     from notebooks.toy_figures import (
         SCALE,
         STRIPE_POINT,
@@ -46,6 +46,7 @@ def _():
         Path,
         STRIPE_POINT,
         TOY_SEED,
+        TOY_SEEDS,
         comparison,
         crisp,
         curve_fit_figure,
@@ -77,6 +78,21 @@ def _(Image, json, np, scene):
     _angle = json.loads((scene / "transforms_train.json").read_text())["camera_angle_x"]
     focal = truth.shape[1] / (2 * np.tan(_angle / 2))
     return baseline, focal, ids, reference_rgb, truth
+
+
+@app.cell
+def _(TOY_SEEDS, json, np, scene):
+    def seed_records(path):
+        """Score records of one saved run, one per repeat seed."""
+        return [json.loads((scene / "seeds" / str(s) / path / "result.json").read_text()) for s in TOY_SEEDS]
+
+    def spread(values, digits, unit=""):
+        """Mean as the value; range as the caption."""
+        values = np.asarray(values)
+        return (f"{values.mean():.{digits}f}{unit}",
+                f"{len(values)}-seed mean; {values.min():.{digits}f}–{values.max():.{digits}f}")
+
+    return seed_records, spread
 
 
 @app.cell
@@ -145,7 +161,8 @@ def _(mo):
                 ## 1. What do more photos change?
                 **Change** the number of training photos. **Watch** the yellow stripe and the
                 blue fragment at the left. Each model trained for 500 steps with smoothing off.
-                The reference camera was not used for training.
+                The reference camera was not used for training. Images are from seed 42; the scores
+                are the mean over 5 seeds.
                 """
             ),
             photo_count,
@@ -155,10 +172,10 @@ def _(mo):
 
 
 @app.cell
-def _(crisp, json, mo, photo_count, result, scene, show, stat):
+def _(TOY_SEED, crisp, mo, photo_count, result, scene, seed_records, show, spread, stat):
     _count = int(photo_count.value.split()[0])
     _folder = scene / "coverage_500" / str(_count)
-    _score = json.loads((_folder / "result.json").read_text())
+    _runs = seed_records(f"coverage_500/{_count}")
     if _count == 3:
         _inputs = mo.hstack(
             [mo.image(str(scene / f"input_{i}.png"), width=200) for i in range(3)], justify="start", gap=0.5
@@ -170,21 +187,25 @@ def _(crisp, json, mo, photo_count, result, scene, show, stat):
             mo.hstack(
                 [
                     show(crisp(scene / "reference.png", 300), caption="Reference (held-out camera)"),
-                    show(crisp(_folder / "heldout.png", 300), caption=f"Model from {_count} photos"),
+                    show(crisp(_folder / "heldout.png", 300), caption=f"Model from {_count} photos (seed {TOY_SEED})"),
                     mo.vstack(
                         [
                             mo.hstack(
                                 [
-                                    stat(f"{_score['foreground_psnr']:.2f} dB", "Colour match", "PSNR, higher is better"),
-                                    stat(f"{_score['depth_mae']:.3f}", "Depth error", "MAE, lower is better"),
+                                    stat(*spread([r["foreground_psnr"] for r in _runs], 2, " dB")[:1],
+                                         "Colour match (PSNR)", spread([r["foreground_psnr"] for r in _runs], 2)[1]),
+                                    stat(spread([r["depth_mae"] for r in _runs], 3)[0], "Depth error (MAE)",
+                                         spread([r["depth_mae"] for r in _runs], 3)[1]),
                                 ],
                                 widths="equal",
                             ),
                             result(
                                 "With 3 photos, an extra blue fragment appears at the left. With 9 and "
-                                "20 photos, the colours get cleaner (PSNR **19.94 → 20.37 → 21.03 dB**), "
-                                "but the depth error does not fall (**0.166 → 0.176 → 0.193**).\n\n"
-                                "**More photos improved the colour, not the shape.**"
+                                "20 photos it is gone, but the stripe edges stay blurred. Over 5 seeds, the "
+                                "colour score rises on average (**19.57 → 20.72 → 21.75 dB**), but the "
+                                "ranges overlap widely. The depth error does not fall "
+                                "(**0.162 → 0.186 → 0.167**).\n\n"
+                                "**On average, more photos improved the colour, not the shape.**"
                             ),
                         ]
                     ),
@@ -474,9 +495,10 @@ def _(mo):
                 """
                 ---
                 ## 6. Does training with smoothing improve the new view?
-                Two saved models saw the same three photos. One also used depth smoothing
-                (weight 0.10). **Change** the steps to 300, then 100, then 1,000. **Watch** the
-                curved yellow stripe in the lower view. Then switch to the front view.
+                Two models saw the same three photos. One also used depth smoothing (weight 0.10).
+                Each pair was trained with 5 seeds. The images show seed 42; the scores cover all 5.
+                **Change** the steps to 300, then 100, then 1,000. **Watch** the depth images in the
+                bottom row: look for horizontal streaks. Then switch cameras.
                 """
             ),
             mo.hstack([camera_view, stage], justify="start", gap=3, wrap=True),
@@ -494,7 +516,7 @@ def _(TOY_SEED, camera_view, json, scene):
             _folder = experiment_scene / (_name if _steps == 300 else f"{_name}_{_steps}")
             _record = json.loads((_folder / "result.json").read_text())
             _record.setdefault("seed", TOY_SEED)
-            # The saved runs trained before coarse jitter existed.
+            # Records from before coarse jitter have no stratified field.
             _record.setdefault("stratified", False)
             saved.append((_folder, _record))
 
@@ -513,39 +535,57 @@ def _(TOY_SEED, camera_view, json, scene):
 
 
 @app.cell
-def _(camera_view, comparison, experiment_scene, mo, result, saved, show, stage, stat):
+def _(TOY_SEED, TOY_SEEDS, camera_view, comparison, experiment_scene, mo, np, result, saved, seed_records, show,
+      stage, stat):
     _pair = [(p, r) for p, r in saved if r["steps"] == stage.value]
-    _off, _on = [r for _, r in _pair]
-    _delta = _on["foreground_psnr"] - _off["foreground_psnr"]
-    _depth_delta = _on["depth_mae"] - _off["depth_mae"]
-    _observation = {
-        100: "Both images are still blurred. Smoothing slightly lowers the colour score and raises the depth error.",
-        300: (
-            "Without smoothing, most of the curved yellow stripe is missing. With smoothing, the stripe is "
-            "visible but blurred."
-            if camera_view.value == "Lower view"
-            else "With smoothing, the yellow stripe is more distinct. The colour score rises and the depth "
-            "error falls."
-        ),
-        1000: "Both stripes are clearer than at 300 steps. Smoothing improves both scores, but neither image "
-        "matches the reference.",
-    }[stage.value]
+    _prefix = "lower/" if camera_view.value == "Lower view" else ""
+    _names = ("off", "on") if stage.value == 300 else (f"off_{stage.value}", f"on_{stage.value}")
+    _off, _on = (seed_records(_prefix + n) for n in _names)
+    _colour = np.array([b["foreground_psnr"] - a["foreground_psnr"] for a, b in zip(_off, _on)])
+    _depth = np.array([b["depth_mae"] - a["depth_mae"] for a, b in zip(_off, _on)])
+    _n = len(TOY_SEEDS)
+    _better_colour, _better_depth = int((_colour > 0).sum()), int((_depth < 0).sum())
+    _summary = (
+        f"Over {_n} seeds, smoothing raised the colour score in **{_better_colour} of {_n}** and lowered the "
+        f"depth error in **{_better_depth} of {_n}**."
+    )
+    _clear = min(_better_colour, _better_depth) == _n
+    _table = mo.ui.table(
+        [
+            {"Seed": seed, "Colour off (dB)": round(a["foreground_psnr"], 2), "Colour on (dB)": round(b["foreground_psnr"], 2),
+             "Colour change (dB)": round(c, 2), "Depth off": round(a["depth_mae"], 3), "Depth on": round(b["depth_mae"], 3),
+             "Depth change": round(d, 3)}
+            for seed, a, b, c, d in zip(TOY_SEEDS, _off, _on, _colour, _depth)
+        ],
+        selection=None,
+        show_column_summaries=False,
+    )
     mo.vstack(
         [
             show(
                 comparison(experiment_scene, [("Smoothing off", _pair[0][0]), ("Smoothing on", _pair[1][0])]),
-                caption=f"{camera_view.value}, {stage.value} steps. Top: colour. Bottom: depth.",
+                caption=f"{camera_view.value}, {stage.value} steps, seed {TOY_SEED}. Top: colour. Bottom: depth.",
             ),
             mo.hstack(
                 [
-                    stat(f"{_on['foreground_psnr']:.2f} dB", "Colour match, smoothing on",
-                         f"{_delta:+.2f} dB vs off ({_off['foreground_psnr']:.2f})"),
-                    stat(f"{_on['depth_mae']:.3f}", "Depth error, smoothing on",
-                         f"{_depth_delta:+.3f} vs off ({_off['depth_mae']:.3f})"),
+                    stat(f"{_colour.mean():+.2f} dB", "Colour change from smoothing",
+                         f"better in {_better_colour} of {_n} seeds; range {_colour.min():+.2f} to {_colour.max():+.2f}"),
+                    stat(f"{_depth.mean():+.3f}", "Depth error change from smoothing",
+                         f"better in {_better_depth} of {_n} seeds; range {_depth.min():+.3f} to {_depth.max():+.3f}"),
                     result(
-                        _observation + "\n\n**In these saved runs, smoothing helps at 300 and 1,000 steps, "
-                        "but not at 100.**",
-                        kind="success" if _delta > 0 else "warn",
+                        _summary + "\n\n" + {
+                            100: "At 100 steps, smoothing makes no real difference: both models are still "
+                            "blurred.",
+                            300: "At 300 steps, smoothing lowers the depth error in most seeds, by about 0.02 "
+                            "(11–12%). In the depth images above, it removes many of the streaks. Its effect on "
+                            "colour varies widely between seeds. Seed 42, shown above, is the least favourable "
+                            "seed in both views.",
+                            1000: "At 1,000 steps, smoothing still lowers the depth error in 4 of 5 seeds, but "
+                            "by less (about 0.006). Its effect on colour is mixed.",
+                        }[stage.value]
+                        + "\n\n**Smoothing mainly improves the shape. Its effect on colour is small and noisy, "
+                        "so one run is not enough to judge it.**",
+                        kind="success" if _clear else "warn" if min(_better_colour, _better_depth) == 0 else "info",
                     ),
                 ],
                 widths=[1, 1, 2],
@@ -553,6 +593,7 @@ def _(camera_view, comparison, experiment_scene, mo, result, saved, show, stage,
                 gap=1,
                 wrap=True,
             ),
+            mo.accordion({f"Every seed at {stage.value} steps ({camera_view.value.lower()})": _table}),
         ]
     )
     return
@@ -585,9 +626,11 @@ def _(mo):
                     settings,
                     mo.callout(
                         mo.md(
-                            "**Time.** About 10 seconds per model on a GPU. On a CPU, about 20 minutes per "
-                            "model at 300 steps.\n\nThe result uses the camera you selected in section 6. "
-                            "New training needs PyTorch."
+                            "**Time.** At 300 steps on the laptop GPU used here: about 25 seconds with "
+                            "smoothing off and 45 seconds with it on. On a CPU with 4 threads, about 16 "
+                            "minutes per model with smoothing on.\n\nThe result uses the camera you selected in section 6. One seed "
+                            "(42) only, so compare it with the 5-seed range in section 6. New training "
+                            "needs PyTorch."
                         ),
                         kind="neutral",
                     ),
@@ -708,25 +751,26 @@ def _(
                 {
                     "Experiment details": mo.md(
                         """
-                        - Sections 2–3 use the front view of the three-photo model at 500 steps. The saved
-                          pairs in section 6 compare fine depth weights 0 and 0.10 at the same step count.
+                        - Sections 2–3 use the front view of the three-photo model at 500 steps, seed 42.
+                          The saved pairs in section 6 compare fine depth weights 0 and 0.10 at the same step
+                          count. Every saved run was trained with 5 seeds (42, 142, 242, 342, 442) and coarse
+                          jitter. Images come from seed 42; scores cover all 5 seeds.
                         - Each camera has its own reference and scores. The lower view was chosen after
                           looking at the images, so it is an extra illustration, not an independent test.
                         - A positive fine weight also turns on a coarse depth weight of 0.10. Weight 0 turns
                           off both depth terms.
-                        - Every run uses seed 42 for model initialization and RGB ray sampling. Depth patches
+                        - A custom run uses seed 42 for model initialization and RGB ray sampling. Depth patches
                           use a separate generator with seed 43. All other training settings stay fixed.
                           A saved result is reused only at the same seed, weight, step count, and
-                          coarse jitter setting. New runs use coarse jitter. The saved runs in section 6
-                          do not, so a new comparison trains its own smoothing-off model.
+                          coarse jitter setting.
                         - PSNR and depth MAE use the true foreground at evaluation scale 2, for the selected
                           held-out camera. They are not training-batch scores or paper benchmark scores.
                           Differences use unrounded values.
                         - The depth images hide the background, so false background surfaces show only in
                           colour. Section 2 moves saved depths with fixed colours. It does not render a new
                           NeRF view.
-                        - The CPU time comes from a 12-step test with four threads (3.54 s per step, plus about
-                          20 s per camera for scoring). It is an estimate, not a full measurement.
+                        - The CPU time comes from a 12-step test with four threads and smoothing on (3.05 s per
+                          step, plus about 17 s per camera for scoring). It is an estimate, not a full measurement.
                         - The readings in section 4 use fixed random noise. True depth gives only their score.
                         """
                     )
@@ -745,9 +789,10 @@ def _(mo, scene):
             mo.md("---\n## Summary"),
             mo.callout(
                 mo.md(
-                    "Three photos can fix the colours and still leave the depth wrong. Smoothing can improve "
-                    "a new view, but it cannot find the true distance; the photos must do that. Next, "
-                    "notebook 2 tests the same penalty on photographs of a real object."
+                    "Three photos can fix the colours and still leave the depth wrong. Smoothing mainly "
+                    "improves the shape; its effect on colour is small and varies between seeds. It cannot "
+                    "find the true distance; the photos must do that. Next, notebook 2 tests the same "
+                    "penalty on photographs of a real object."
                 ),
                 kind="info",
                 title="What we learned",
@@ -756,6 +801,7 @@ def _(mo, scene):
                 """
                 **Questions for discussion**
                 - Which saved step count contradicts "smoothing always helps"?
+                - Seed 42 disagrees with the 5-seed average at 300 steps. What would one run have told you?
                 - Why can a patch have zero loss change and still have the wrong depth?
                 """
             ),
