@@ -77,7 +77,7 @@ def run_condition(folder, steps, weight, training_scene=ASSETS):
 
     start = perf_counter()
     views = len(json.loads((training_scene / "transforms_train.json").read_text())["frames"])
-    sources = ("train.py", "model.py", "data.py", "two_spheres.py", "notebooks/toy_experiment.py")
+    sources = ("train.py", "model.py", "data.py", "two_spheres.py", "notebooks/toy_experiment.py", "provenance.py")
     provenance = dict(code_revision=git("rev-parse", "HEAD"), local_changes=git("diff", "HEAD", "--", *sources),
                       code_sha256=file_hashes(sources),
                       seed=TOY_SEED, evaluation_scale=2, heldout_camera=dict(angle=15, elevation=5),
