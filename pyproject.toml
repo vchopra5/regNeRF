@@ -1,0 +1,21 @@
+[project]
+name = "regnerf-depth"
+version = "0.1.0"
+description = "Mip-NeRF with RegNeRF depth regularization and edge-aware depth smoothing for sparse views."
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.4",
+    "numpy>=1.26",
+    "Pillow>=10.1",
+]
+
+[dependency-groups]
+# The toy lesson. Same pin as requirements-notebooks.txt.
+notebooks = ["marimo==0.25.2"]
+# Only `python prepare_dtu.py --download` needs this.
+data = ["huggingface_hub>=0.23"]
+
+[tool.uv]
+# The project is a set of scripts run from the root, not an installable package.
+package = false
+default-groups = ["notebooks", "data"]
