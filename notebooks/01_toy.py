@@ -125,8 +125,8 @@ def _(mo, scene):
                         the depth penalty.
 
                         **How to use this page.** Each section has controls at the top. Change one
-                        control, then read the box beside the figure. Nothing trains until you
-                        select **Run comparison** in section 7. Allow about 15 minutes.
+                        control, then read the box beside the figure. Everything uses saved
+                        results, so nothing trains. Allow about 15 minutes.
 
                         1. More photos
                         2. Wrong depth and camera motion
@@ -134,7 +134,8 @@ def _(mo, scene):
                         4. Smoothing a noisy curve
                         5. What the depth loss measures
                         6. Training with and without smoothing
-                        7. Train your own comparison
+
+                        After the lab, an optional panel at the end lets you train your own comparison.
                         """
                     ),
                 ],
@@ -610,12 +611,11 @@ def _(mo):
         )
         .form(submit_button_label="Run comparison")
     )
-    mo.vstack(
+    # Shown inside the closed "After the lab" panel by the next cell.
+    train_controls = mo.vstack(
         [
             mo.md(
                 """
-                ---
-                ## 7. Train your own comparison
                 Pick a smoothing weight and a step count, then select **Run comparison**. The page
                 trains your model and a model with smoothing off, unless a matching result is
                 already saved. Weight 0 turns smoothing off. Every run uses seed 42.
@@ -642,7 +642,7 @@ def _(mo):
             ),
         ]
     )
-    return (settings,)
+    return settings, train_controls
 
 
 @app.cell
@@ -661,6 +661,7 @@ def _(
     score_row,
     settings,
     show,
+    train_controls,
 ):
     from importlib.util import find_spec
 
@@ -744,9 +745,21 @@ def _(
         )
     mo.vstack(
         [
-            _panel,
-            mo.md(f"**All scores, {camera_view.value.lower()}.** Higher PSNR is better. Lower MAE is better."),
-            _scores(),
+            mo.md("---"),
+            mo.accordion(
+                {
+                    "After the lab: train your own comparison (optional; about 1 minute on a GPU, "
+                    "16 minutes per model on a CPU)": mo.vstack(
+                        [
+                            train_controls,
+                            _panel,
+                            mo.md(f"**All scores, {camera_view.value.lower()}.** Higher PSNR is better. "
+                                  "Lower MAE is better."),
+                            _scores(),
+                        ]
+                    )
+                }
+            ),
             mo.accordion(
                 {
                     "Experiment details": mo.md(
