@@ -147,7 +147,7 @@ It writes `notebooks/results/scan40.json`, which notebook 2 reads, and two text 
 
 The report uses the arithmetic mean of **25 per-view foreground RGB PSNR values**. It does not use training-batch PSNR or pooled error over all test pixels. Report `on minus off` in dB. Report a tie or decline as measured. RGB PSNR alone does not establish better geometry. A geometry claim needs separate reference depth or geometry and an appropriate error measure.
 
-Then save the renders that notebook 2 shows: held-out view 45 from both models:
+Then save the renders that notebook 2 shows: all 25 test views from both models, colour and depth, at scale 4 (about 4 minutes):
 
 ```sh
 python -m notebooks.render_scan40_views

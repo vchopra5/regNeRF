@@ -82,7 +82,7 @@ uv run python -m notebooks.evaluate_pair
 uv run python -m notebooks.render_scan40_views
 ```
 
-Training the pair takes about 1 to 1.5 hours on a laptop GPU: about 46 minutes for the depth-on model and less for the depth-off model. Evaluation and rendering take about 10 minutes. `compare_depth.py` records the code revision and settings in `protocol.json` before training. `evaluate_pair` checks the pair against that record and writes `notebooks/results/scan40.json`. `render_scan40_views` writes the view-45 renders to `notebooks/results/scan40/`. Missing files and photos show a warning with the command that makes them.
+Training the pair takes about 1 to 1.5 hours on a laptop GPU: about 46 minutes for the depth-on model and less for the depth-off model. Evaluation takes about 8 minutes and rendering about 4 minutes. `compare_depth.py` records the code revision and settings in `protocol.json` before training. `evaluate_pair` checks the pair against that record and writes `notebooks/results/scan40.json`. `render_scan40_views` renders all 25 test views from both models at scale 4 and writes them to `notebooks/results/scan40/` (a few MB of JPEG), so students can switch between views without a model or a GPU. Missing files and photos show a warning with the command that makes them.
 
 Open the notebook with `env PYTHONPATH=$PWD uv run marimo run notebooks/02_paper.py` (fish) or `PYTHONPATH=$PWD uv run marimo run notebooks/02_paper.py` (bash, zsh).
 

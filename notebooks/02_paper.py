@@ -86,7 +86,7 @@ def _(PAPER, downloaded, mo, scene, small):
 
         1. What the paper reports
         2. The cameras and the three training photos
-        3. One new camera
+        3. New cameras
         4. The score over 25 new cameras
         """
     )
@@ -201,55 +201,63 @@ def _(camera_map, downloaded, dtu, mo, no_photos, result, scene, show, small):
 
 
 @app.cell
-def _(Image, downloaded, images, json, missing, mo, no_photos, result, scene, show, small, view_grid):
+def _(dtu, mo):
+    view_choice = mo.ui.dropdown({f"View {v}": v for v in dtu.TEST_IDS}, value="View 45", label="Test view")
+    mo.vstack(
+        [
+            mo.md(
+                """
+                ---
+                ## 3. New cameras
+                Both models render every test camera, which neither saw in training. Start with view 45,
+                the diamond in the camera map. **Watch** the opening under the top stone and the edges of the
+                two pillars, first in colour, then in depth. Then **change** the view: compare a camera close
+                to a training camera with one far from all three.
+                """
+            ),
+            view_choice,
+        ]
+    )
+    return (view_choice,)
+
+
+@app.cell
+def _(Image, downloaded, images, json, missing, mo, no_photos, result, scene, show, small, view_choice, view_grid):
     _record_file = images / "render_record.json"
-    _view = 45
+    _view = view_choice.value
     if not _record_file.is_file():
-        _body = missing("The view renders are", "uv run python -m notebooks.render_scan40_views")
+        _body = missing("The test-view renders are", "uv run python -m notebooks.render_scan40_views")
     elif not downloaded:
         _body = no_photos()
     else:
         _record = json.loads(_record_file.read_text())
-        _view = _record["view"]
 
         def _open(name):
-            return Image.open(images / f"view{_view}_{name}.png")
+            return Image.open(images / f"view{_view}_{name}.jpg")
 
         _body = mo.vstack(
             [
                 show(
                     view_grid(small(scene / "image" / f"{_view:06}.png", 600), _open("rgb_off"), _open("rgb_on"),
-                              _open("depth_off"), _open("depth_on"), _record["depth_range"]),
-                    caption=f"Held-out view {_view}, step {_record['step']}, evaluation scale {_record['scale']}. "
+                              _open("depth_off"), _open("depth_on"), _record["depth_ranges"][str(_view)]),
+                    caption=f"Test view {_view}, step {_record['step']}, rendered at scale {_record['scale']}. "
                     "Top: colour. Bottom: depth (light is near).",
                 ),
                 result(
                     "**Describe only what you can see.** Where does each model miss structure or put the wrong "
-                    "colour? Where does the depth change suddenly without an edge in the photo? One view is "
+                    "colour? Where does the depth change suddenly without an edge in the photo? Each view is "
                     "an illustration; the score in section 4 uses all 25 test views.",
                     kind="neutral",
                     title="Look and compare",
                 ),
             ]
         )
-    mo.vstack(
-        [
-            mo.md(
-                f"""
-                ---
-                ## 3. One new camera
-                Both models render held-out view {_view}, the diamond in the camera map. **Watch** the
-                opening under the top stone and the edges of the two pillars, first in colour, then in depth.
-                """
-            ),
-            _body,
-        ]
-    )
+    _body
     return
 
 
 @app.cell
-def _(dtu, json, missing, mo, np, per_view_change, result, results, show, stat):
+def _(dtu, json, missing, mo, np, per_view_change, result, results, show, stat, view_choice):
     _file = results / "scan40.json"
     if _file.is_file():
         _data = json.loads(_file.read_text())
@@ -275,7 +283,8 @@ def _(dtu, json, missing, mo, np, per_view_change, result, results, show, stat):
                     widths="equal",
                     gap=1,
                 ),
-                show(per_view_change(dtu.TEST_IDS, _delta, highlight=45)),
+                show(per_view_change(dtu.TEST_IDS, _delta, highlight=view_choice.value),
+                     caption=f"The view chosen in section 3 (view {view_choice.value}) has a dark label."),
                 result(
                     f"On this scan, depth smoothing {_effect}. It was better in **{_better} of 25** test views; "
                     f"the change per view ranges from {_delta.min():+.2f} to {_delta.max():+.2f} dB.\n\n"
@@ -362,7 +371,7 @@ def _(mo):
                         uv run python prepare_dtu.py --download
                         uv run python compare_depth.py --output-dir checkpoint/scan40_pair_new --run
                         uv run python -m notebooks.evaluate_pair
-                        uv run python -m notebooks.render_scan40_views
+                        uv run python -m notebooks.render_scan40_views   # all 25 test views, about 4 minutes
                         ```
                         """
                     ),

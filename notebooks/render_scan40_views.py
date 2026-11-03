@@ -1,8 +1,9 @@
-"""Save the scan 40 images that notebook 2 shows. Do not train.
+"""Save the scan 40 renders that notebook 2 shows. Do not train.
 
-Render one held-out view (colour and depth) from the depth-off and depth-on checkpoints. The notebook
-reads these files, so the lab does not need the checkpoints. It does not save DTU photos: the notebook
-reads those from data/dtu/scan40, which students download with prepare_dtu.py.
+Render every held-out test view (colour and depth) from the depth-off and depth-on checkpoints, at
+a small size (scale 4, 400 x 300) as JPEG. The notebook reads these files, so the lab needs no
+checkpoints and no GPU, and students can switch between views at once. It saves no DTU photos:
+the notebook reads those from data/dtu/scan40, which students download with prepare_dtu.py.
 
   python -m notebooks.render_scan40_views
 """
@@ -30,8 +31,7 @@ def depth_image(depth, low, high):
 
 
 @torch.inference_mode()
-def render(checkpoint, scene, view, scale, device):
-    model = load_model(checkpoint, device, near=dtu.BOUNDS[0], far=dtu.BOUNDS[1])
+def render(model, scene, view, scale, device):
     with np.load(scene / "cameras.npz") as cameras, Image.open(scene / "image" / f"{view:06}.png") as source:
         h, w, intrinsics, pose = dtu.camera(cameras, view, source.size, scale)
     rays = [field.reshape(h * w, -1) for field in get_rays(h, w, intrinsics, pose)]
@@ -46,34 +46,38 @@ def main():
                         help="Folder with off/ and on/ from compare_depth.py.")
     parser.add_argument("--step", type=int, default=NUM_STEPS)
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data/dtu/scan40")
-    parser.add_argument("--view", type=int, default=45)
-    parser.add_argument("--scale", type=int, default=2)
+    parser.add_argument("--scale", type=int, default=4)
     parser.add_argument("--output", type=Path, default=OUTPUT)
     args = parser.parse_args()
-    if args.view not in dtu.TEST_IDS:
-        parser.error(f"Use a held-out test view: {dtu.TEST_IDS}")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args.output.mkdir(parents=True, exist_ok=True)
 
-    renders = {}
+    checkpoints, renders = {}, {}
     for name in ("off", "on"):
-        checkpoint = args.pair_dir / name / f"checkpoint_{args.step}.pt"
-        if torch.load(checkpoint, map_location="cpu", weights_only=True).get("step") != args.step:
-            raise ValueError(f"Expected step {args.step}: {checkpoint}")
-        renders[name] = (checkpoint, *render(checkpoint, args.data_dir, args.view, args.scale, device))
-    # One depth range for both models: the 2nd to 98th percentile of their combined depth.
-    combined = np.concatenate([depth.ravel() for _, _, depth in renders.values()])
-    low, high = (float(v) for v in np.percentile(combined, [2, 98]))
-    for name, (_, rgb, depth) in renders.items():
-        rgb.save(args.output / f"view{args.view}_rgb_{name}.png")
-        depth_image(depth, low, high).save(args.output / f"view{args.view}_depth_{name}.png")
+        checkpoints[name] = args.pair_dir / name / f"checkpoint_{args.step}.pt"
+        if torch.load(checkpoints[name], map_location="cpu", weights_only=True).get("step") != args.step:
+            raise ValueError(f"Expected step {args.step}: {checkpoints[name]}")
+        model = load_model(checkpoints[name], device, near=dtu.BOUNDS[0], far=dtu.BOUNDS[1])
+        renders[name] = {view: render(model, args.data_dir, view, args.scale, device) for view in dtu.TEST_IDS}
+        print(f"Rendered {len(dtu.TEST_IDS)} views with depth {name}", flush=True)
 
-    record = dict(view=args.view, scale=args.scale, step=args.step, depth_range=[low, high],
-                  checkpoints={name: str(path) for name, (path, _, _) in renders.items()},
+    depth_ranges = {}
+    for view in dtu.TEST_IDS:
+        # One depth range per view for both models: the 2nd to 98th percentile of their combined depth.
+        combined = np.concatenate([renders[name][view][1].ravel() for name in renders])
+        low, high = (float(v) for v in np.percentile(combined, [2, 98]))
+        depth_ranges[view] = [low, high]
+        for name in renders:
+            rgb, depth = renders[name][view]
+            rgb.save(args.output / f"view{view}_rgb_{name}.jpg", quality=90)
+            depth_image(depth, low, high).save(args.output / f"view{view}_depth_{name}.jpg", quality=90)
+
+    record = dict(views=list(dtu.TEST_IDS), scale=args.scale, step=args.step, depth_ranges=depth_ranges,
+                  checkpoints={name: str(path) for name, path in checkpoints.items()},
                   rendered_utc=datetime.now(timezone.utc).isoformat(), code_revision=git("rev-parse", "HEAD"),
                   code_sha256=file_hashes(("model.py", "data.py", "dtu.py", "notebooks/render_scan40_views.py")))
     (args.output / "render_record.json").write_text(json.dumps(record, indent=2))
-    print(f"Saved view {args.view} renders to {args.output}")
+    print(f"Saved {len(dtu.TEST_IDS)} views to {args.output}")
 
 
 if __name__ == "__main__":
