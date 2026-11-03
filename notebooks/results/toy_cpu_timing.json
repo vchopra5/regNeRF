@@ -1,0 +1,42 @@
+{
+  "sample_steps": 12,
+  "target_steps": 300,
+  "threads": 4,
+  "interop_threads": 1,
+  "device": "cpu",
+  "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+  "python": "3.14.6",
+  "torch": "2.11.0+cu128",
+  "fine_weight": 0.05,
+  "coarse_weight": 0.1,
+  "views": 3,
+  "scale": 2,
+  "seed": 42,
+  "code_revision": "077c6f49c7b1a4ea13973a4cc188219d139d0f97",
+  "code_sha256": {
+    "train.py": "0bb254dd4da894619450d55f4c7a99ab29dc1b6b969058c9b85eea1ca28e64ab",
+    "model.py": "950733299812fdde83f3a68548af5d562b3ee89020d4d0e8a725dcaea31817e3",
+    "data.py": "49c5346d3ab3820a56aea4abc570a9f751ccc15048e46a9bde9ff5c3c033c3c6",
+    "two_spheres_canny.py": "c4b901678d2c7a49b2e4f46a8e6cfc176cc14019373e90b10ad69db4f83662e0",
+    "notebooks/toy_experiment.py": "a6d7731fbccff530a3db13f1e7a96b7be3d6d003458c7c55438dce431f62c89d"
+  },
+  "sampled_step_seconds": [
+    3.505812200019136,
+    3.5287282000062987,
+    3.5271552999620326,
+    3.601718300022185,
+    3.554361400019843,
+    3.516443700005766,
+    3.4720741999917664,
+    3.593407800013665,
+    3.583627099986188,
+    3.5639130999916233
+  ],
+  "median_step_seconds": 3.541544800013071,
+  "measured_training_seconds": 44.37984160002088,
+  "measured_render_and_score_seconds": 19.63128809997579,
+  "measured_total_seconds": 64.01112969999667,
+  "estimated_total_seconds": 1083.976032103761,
+  "estimated_minutes": 18.066267201729353,
+  "note": "Extrapolated after two warm-up updates. Includes initialization, rendering, and scoring. Hardware and load can change the time."
+}

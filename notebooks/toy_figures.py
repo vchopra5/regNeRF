@@ -1,6 +1,13 @@
 """Draw the same depth scale for the saved figures and the live pixel inspector."""
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
+
+
+def font(size=15):
+    try:
+        return ImageFont.truetype("arial.ttf", size)
+    except OSError:
+        return ImageFont.load_default(size=size)
 
 
 def reproject_colours(rgb, depth, foreground, focal, shift):
@@ -32,7 +39,7 @@ def shear_patch(rgb, truth, prediction, focal, shift):
     source = Image.fromarray(rgb).resize((200, 150))
     ImageDraw.Draw(source).rectangle((x0, y0, x0+side, y0+side), outline="white", width=2)
     ImageDraw.Draw(source).ellipse((col-2,row-2,col+2,row+2),fill="white",outline="#203039")
-    board = Image.new("RGB", (780, 322), "white")
+    board = Image.new("RGB", (780, 370), "white")
     board.paste(source, (0, 25))
     draw = ImageDraw.Draw(board)
     draw.text((10, 6), "Original photo", fill="#263c49")
@@ -49,6 +56,8 @@ def shear_patch(rgb, truth, prediction, focal, shift):
     draw.ellipse((target[0]-3,target[1]-3,target[0]+3,target[1]+3),fill="#a94126")
     draw.ellipse((97,287,103,293),outline="#58686f")
     draw.rectangle((camera[0]-4,286,camera[0]+4,294),fill="#00766f")
+    draw.text((12, 324), "Circle: start camera", fill="#58686f", font=font(13))
+    draw.text((12, 344), f"Square: camera at {shift:+.2f}", fill="#00766f", font=font(13))
     delta = np.degrees(np.arctan2(patch_x-shift,z)-np.arctan2(patch_x,z))
     draw.text((12,302), f"Line of sight turns {abs(delta):.1f} degrees",fill="#263c49")
     common_motion = focal * shift / truth[y0+side//2, x0+side//2]
@@ -69,10 +78,17 @@ def shear_patch(rgb, truth, prediction, focal, shift):
             pen.line([vertex(k,j) for k in range(side+1)], fill="#a7dae2", width=1)
             pen.line([vertex(j,k) for k in range(side+1)], fill="#a7dae2", width=1)
         dot_x,dot_y = vertex(side//2,side//2)
+        guide_x = 28 + 8*(side//2)
+        pen.line((guide_x, 0, guide_x, 209), fill="white", width=1)
         pen.ellipse((dot_x-4,dot_y-4,dot_x+4,dot_y+4),fill="white",outline="#203039")
         offset=204+idx*288
         board.paste(panel,(offset,58))
         draw.text((offset+6,36),label,fill="#263c49")
+    marker_x, marker_y = STRIPE_POINT
+    offset = focal*shift*(1/truth[marker_y,marker_x] - 1/prediction[marker_y,marker_x])
+    draw.text((215, 290), f"Marked point error: {offset:+.1f} source pixels", fill="#263c49", font=font(18))
+    draw.text((215, 321), "White line: correct point position. Both close-ups follow the true point.", fill="#263c49", font=font(13))
+    draw.text((215, 346), "Same paint colours; only depth changes. Close-ups use 8x magnification.", fill="#263c49", font=font(13))
     return board
 
 
@@ -105,14 +121,14 @@ def curve_fit_figure(reference, readings, fitted):
         draw.line(points(curve),fill="#c45324",width=2)
         draw.text((left,215), "Left side",fill="#455762")
         draw.text((left+342,215), "Right side",anchor="ra",fill="#455762")
-    for x, label, colour in [(40,"Measured depth","#828b91"),(222,"True sphere","#253d50"),(405,"Fitted depth","#c45324")]:
+    for x, label, colour in [(40,"Simulated readings","#828b91"),(222,"True sphere","#253d50"),(405,"Fitted depth","#c45324")]:
         draw.text((x,244),label,fill=colour)
     draw.text((600,244),"Depth in scene units",fill="#455762")
     return board
 
 
 def patch_experiment(reference, distance, whole_patch):
-    """Edit a central sphere patch and measure the trainer's unit-opacity loss."""
+    """Show the exact unit-opacity loss and the four pairs around the marked pixel."""
     reference = reference.astype(np.float64)
     edited = reference.copy()
     if whole_patch:
@@ -125,45 +141,74 @@ def patch_experiment(reference, distance, whole_patch):
         return np.stack((anchor - patch[:-1, 1:], anchor - patch[1:, :-1]))
 
     before, after = differences(reference), differences(edited)
-    losses = [np.square(delta).sum(axis=0).mean() for delta in (before, after)]
+    losses = [float(np.square(delta).sum(axis=0).mean()) for delta in (before, after)]
     changed = ~np.isclose(before, after, atol=1e-12, rtol=0)
-    board = Image.new("RGB", (760, 277), "white")
+    change = losses[1] - losses[0]
+    if abs(change) < 1e-12:
+        change = 0.0
+    board = Image.new("RGB", (1000, 600), "white")
     pen = ImageDraw.Draw(board)
-    ink, accent = "#203743", "#b44822"
-    pen.text((16, 8), "8 x 8 surface patch", fill=ink)
-    cell = 23
+    ink, accent, green = "#203743", "#b44822", "#00766f"
+    colour = accent if change else green
+    pen.text((20, 12), "Smoothness loss: original  ->  changed", fill=ink, font=font(20))
+    pen.text((20, 43), f"{losses[0]:.8f}  ->  {losses[1]:.8f}", fill=ink, font=font(23))
+    pen.text((590, 12), f"LOSS CHANGE: {change:+.8f}" if change else "LOSS CHANGE: 0", fill=colour, font=font(24))
+    pen.text((590, 48), f"{int(changed.sum())} neighbour pairs changed", fill=colour, font=font(18))
+    pen.text((20, 84), f"{'Whole patch' if whole_patch else 'Marked pixel'} moved by {distance:.2f} scene units", fill=ink, font=font(16))
+    # Use a fixed loss scale for all distances and both controls.
+    bar_max = losses[0] + 4 * .30**2 / 49 + .0002
+    for y, label, loss, c in [(85, "Original", losses[0], ink), (107, "Changed", losses[1], colour)]:
+        pen.text((590, y), label, fill=c, font=font(13))
+        pen.rectangle((660, y, 974, y+12), fill="#e8eef0")
+        pen.rectangle((660, y, 660 + 314*loss/bar_max, y+12), fill=c)
+    pen.text((20, 132), "8 x 8 depth patch", fill=ink, font=font(17))
+    cell = 25
     def centre(row, col):
-        return 22 + col*cell + cell//2, 36 + row*cell + cell//2
+        return 35 + col*cell + cell//2, 166 + row*cell + cell//2
     for row, col in np.ndindex(edited.shape):
         x, y = centre(row, col)
-        tint = min(1., max(0., (edited[row,col] - reference.min()) / .3))
-        colour = tuple(round(a + tint*(b-a)) for a,b in zip((238,244,246),(54,107,134)))
-        pen.rectangle((x-10,y-10,x+10,y+10), fill=colour)
-    for axis, row, col in np.argwhere(changed):
-        pen.line((centre(row,col), centre(row+int(axis==1),col+int(axis==0))),fill=accent,width=3)
+        tint = np.clip((edited[row,col] - reference.min()) / .32, 0, 1)
+        c = tuple(round(a + tint*(b-a)) for a,b in zip((238,244,246),(54,107,134)))
+        pen.rectangle((x-11,y-11,x+11,y+11), fill=c)
+    pairs = [(0,4,3,"Left"), (0,4,4,"Right"), (1,3,4,"Above"), (1,4,4,"Below")]
+    for axis, row, col, label in pairs:
+        end = (row+int(axis==1), col+int(axis==0))
+        pen.line((centre(row,col), centre(*end)), fill=accent if changed[axis,row,col] else green, width=4)
+        x,y = centre(*end) if (row,col)==(4,4) else centre(row,col)
+        pen.text((x-4,y-7), label[0], fill=ink, font=font(12))
     x,y = centre(4,4)
-    pen.ellipse((x-4,y-4,x+4,y+4),fill=ink)
-    pen.text((16,228), "Dot: marked pixel", fill=ink)
-    pen.text((16,248), "Orange: changed neighbour pair", fill=accent)
+    pen.ellipse((x-5,y-5,x+5,y+5),fill=ink)
+    pen.text((20, 377), "Dot: moved pixel in single-pixel mode", fill=ink, font=font(13))
+    pen.text((20, 399), "Orange: changed pair. Green: unchanged pair.", fill=ink, font=font(13))
 
-    pen.text((285,8), "Depth across the marked row (scene units)", fill=ink)
-    bottom = float(np.floor(reference.min()*100)/100) - .02
-    def level(depth):
-        return 213 - (depth-bottom)*480
-    for tick in range(4):
-        depth = round(reference.min(),2) + tick*.1
-        y = level(depth)
-        pen.line((320,y,725,y),fill="#dde4e7")
-        pen.text((282,y-6),f"{depth:.2f}",fill=ink)
-    for patch,colour in ((reference,ink),(edited,accent)):
-        points = [(322+57*col, level(z)) for col,z in enumerate(patch[4])]
-        pen.line(points, fill=colour,width=2)
+    pen.text((320, 132), "Depth across the marked row (same scale in both modes)", fill=ink, font=font(17))
+    low = float(reference.min()) - .025
+    high = low + .38
+    def level(z):
+        return 355 - (z-low)*185/(high-low)
+    for tick in np.linspace(low+.025, high-.025, 4):
+        y = level(tick)
+        pen.line((370,y,970,y),fill="#dde4e7")
+        pen.text((315,y-8),f"{tick:.2f}",fill=ink,font=font(13))
+    for patch,c,width in ((reference,ink,5),(edited,accent,2)):
+        points = [(375+84*col,level(z)) for col,z in enumerate(patch[4])]
+        pen.line(points,fill=c,width=width)
         for x,y in points:
-            pen.ellipse((x-3,y-3,x+3,y+3),fill=colour)
-    pen.text((315,227),"True depth", fill=ink)
-    pen.text((422,227),"Edited depth", fill=accent)
-    pen.text((315,248),f"Patch loss: {losses[0]:.7f}  ->  {losses[1]:.7f}",fill=ink)
-    return board, int(changed.sum()), np.abs(edited-reference).mean()
+            pen.ellipse((x-3,y-3,x+3,y+3),fill=c)
+    pen.text((370, 377), "Dark: original depth. Orange: changed depth.", fill=ink, font=font(14))
+    pen.text((370, 399), "Smoothing sees differences, not absolute distance.", fill=colour, font=font(17))
+    pen.line((20,432,978,432),fill="#dce2e4")
+    pen.text((20,443), "Pair", fill=ink,font=font(15))
+    pen.text((160,443), "Depth difference: original -> changed", fill=ink,font=font(15))
+    pen.text((615,443), "Loss contribution: original -> changed", fill=ink,font=font(15))
+    for i,(axis,row,col,label) in enumerate(pairs):
+        old,new = before[axis,row,col],after[axis,row,col]
+        y = 470+24*i
+        pen.text((20,y),label,fill=ink,font=font(14))
+        pen.text((160,y),f"{old:+.5f} -> {new:+.5f}",fill=accent if changed[axis,row,col] else green,font=font(14))
+        pen.text((615,y),f"{old**2/49:.8f} -> {new**2/49:.8f}",fill=ink,font=font(14))
+    pen.text((20,576), "Each pair contributes its squared difference / 49. The top loss includes all 98 pairs. Opacity A = 1 here.", fill=ink,font=font(13))
+    return board, int(changed.sum()), float(np.abs(edited-reference).mean())
 
 
 def depth_diagnosis(truth, prediction, ids, x, y):
@@ -232,7 +277,7 @@ def depth_profile(truth, predicted, ids, row, left, right, limits=(2, 6), curve_
 def comparison(scene, folders):
     with np.load(scene/"reference.npz") as data:
         truth,ids=data["depth"],data["ids"]
-    board=Image.new("RGB",(210*(1+len(folders)),355),"white")
+    board=Image.new("RGB",(220*(1+len(folders)),390),"white")
     draw=ImageDraw.Draw(board)
     for i,(name,folder) in enumerate([("Reference",None),*folders]):
         if folder is None:
@@ -242,44 +287,41 @@ def comparison(scene, folders):
             rgb=Image.open(folder/"rgb.png")
             with np.load(folder/"prediction.npz") as data:
                 depth=data["depth"]
-        x=5+210*i
-        draw.text((x,5),name,fill="black")
+        x=10+220*i
+        draw.text((x,5),name,fill="black",font=font(15))
         board.paste(rgb,(x,25))
         board.paste(depth_image(depth,ids),(x,185))
+    draw.text((10,348),"Depth: light = near (2.5); dark = far (5.0 scene units).",fill="#203743",font=font(13))
+    draw.text((10,370),"Depth uses the true foreground mask. RGB includes the background.",fill="#203743",font=font(12))
     return board
 
 
 def surface_inspector(truth, prediction, ids, focal, angle, row, left, right):
-    """Back-project both depth maps into camera space and turn their visible surfaces."""
+    """Turn the red sphere's visible surface using the same coordinates and scale."""
     height, width = truth.shape
-    v, u = np.nonzero(ids)
+    v,u = np.nonzero(ids == 1)
     theta = np.deg2rad(angle)
-    board = Image.new("RGB", (740, 310), "#f6f7f7")
+    # Saved images and rays use every second full-resolution pixel.
+    true_x = (u+.25-width/2)*truth[v,u]/focal
+    true_y = (v+.25-height/2)*truth[v,u]/focal
+    centre_x,centre_y,centre_z = np.mean(true_x),np.mean(true_y),np.mean(truth[v,u])
+    board = Image.new("RGB", (800, 330), "white")
     draw = ImageDraw.Draw(board)
-    for i, (label, depth) in enumerate([("Known surface", truth), ("Predicted surface", prediction)]):
-        z = depth[v, u]
-        x = (u + 0.5 - width/2) * z / focal
-        y = (v + 0.5 - height/2) * z / focal
-        # Rotate around the sphere centre, four units from this camera.
-        horizontal = x*np.cos(theta) + (z-4)*np.sin(theta)
-        distance = -x*np.sin(theta) + (z-4)*np.cos(theta)
-        px = 127 + i*250 + 99*horizontal
-        py = 141 + 99*y
-        shade = np.clip((4.12-z)/1.25, 0, 1)
-        ink = np.column_stack([43+151*shade, 67+149*shade, 79+143*shade]).astype(int)
-        ink[(v==row)&(u>=left)&(u<=right)] = (237,117,24)
+    for i,(label,depth) in enumerate([("True red sphere",truth),("Three-photo baseline",prediction)]):
+        z = depth[v,u]
+        x = (u+.25-width/2)*z/focal
+        y = (v+.25-height/2)*z/focal
+        horizontal = (x-centre_x)*np.cos(theta)+(z-centre_z)*np.sin(theta)
+        distance = -(x-centre_x)*np.sin(theta)+(z-centre_z)*np.cos(theta)
+        px = 200+i*400+150*horizontal
+        py = 161+150*(y-centre_y)
+        shade = np.clip((3.65-z)/.85,0,1)
+        ink = np.column_stack([43+151*shade,67+149*shade,79+143*shade]).astype(int)
+        selected = (v==row)&(u>=left)&(u<=right)
+        ink[selected] = (237,117,24)
         for j in np.argsort(-distance):
-            draw.ellipse((px[j]-1.25,py[j]-1.25,px[j]+1.25,py[j]+1.25),fill=tuple(ink[j]))
-        draw.text((i*250+65,12),label,fill="#20363d")
-    # The lens shows actual source pixels, at identical magnification for both maps.
-    size = max(1,right-left+1)
-    top, bottom = max(0,row-max(3,size//5)), min(height,row+max(3,size//5)+1)
-    for i,depth in enumerate([truth,prediction]):
-        crop=depth_image(depth,ids).crop((left,top,right+1,bottom))
-        crop.thumbnail((200,78))
-        factor=min(200/crop.width,78/crop.height)
-        crop=crop.resize((max(1,round(crop.width*factor)),max(1,round(crop.height*factor))),Image.Resampling.NEAREST)
-        board.paste(crop,(510,55+118*i))
-        draw.text((510,34+118*i),["Reference pixels","Predicted pixels"][i],fill="#20363d")
-    draw.text((18,278),"Orange: selected pixels     |     Only the surface visible to the original camera is sampled.",fill="#334953")
+            draw.ellipse((px[j]-1.5,py[j]-1.5,px[j]+1.5,py[j]+1.5),fill=tuple(ink[j]))
+        draw.text((i*400+100,12),label,fill="#20363d",font=font(18))
+    draw.text((20,296),"Orange: the same source pixels on both surfaces. Same scale and rotation.",fill="#334953",font=font(15))
+    draw.text((20,316),"Only the surface visible to the held-out camera is shown. This is not a full mesh.",fill="#334953",font=font(13))
     return board

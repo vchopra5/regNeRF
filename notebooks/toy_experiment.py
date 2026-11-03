@@ -7,6 +7,48 @@ import numpy as np
 from PIL import Image
 
 ASSETS = Path(__file__).resolve().parent / "assets" / "two_spheres"
+TOY_SEED = 42
+CAMERAS = {"Front view": (15, 5), "Lower view": (15, -15)}
+
+
+def saved_asset_names():
+    """List the saved files used by the lesson and optional training."""
+    names = ["reference.png", "reference.npz", "transforms_train.json"]
+    names += [f"input_{i}.png" for i in range(3)]
+    for count in (3, 9, 20):
+        names += [f"coverage_500/{count}/{name}" for name in ("heldout.png", "inputs.png", "result.json")]
+    names.append("coverage_500/3/prediction.npz")
+    for condition in ("off", "on", "off_100", "on_100", "off_1000", "on_1000"):
+        names += [f"{condition}/{name}" for name in ("rgb.png", "prediction.npz", "result.json")]
+        names += [f"lower/{condition}/{name}" for name in ("rgb.png", "prediction.npz", "result.json")]
+    names += ["lower/reference.png", "lower/reference.npz"]
+    return names
+
+
+def ensure_assets():
+    """Unpack the small repository archive. Do not download or train."""
+    import hashlib
+    from zipfile import ZipFile
+
+    bundle = Path(__file__).with_name("toy_saved_results.zip")
+    if not bundle.is_file():
+        raise FileNotFoundError(f"Missing {bundle.name}. Get the complete repository, including this archive.")
+    base = ASSETS.resolve()
+    with ZipFile(bundle) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        if manifest["version"] != 1 or set(manifest["files"]) != set(saved_asset_names()):
+            raise ValueError("The toy archive has an unsupported manifest.")
+        for name, checksum in manifest["files"].items():
+            target = (base / name).resolve()
+            if not target.is_relative_to(base):
+                raise ValueError(f"The toy archive path is outside the data folder: {name}")
+            payload = target.read_bytes() if target.is_file() else archive.read(name)
+            if hashlib.sha256(payload).hexdigest() != checksum:
+                raise ValueError(f"Saved toy data failed its checksum: {name}")
+            if not target.is_file():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(payload)
+    return ASSETS
 
 
 def prepare_scene(output=ASSETS, extra_angles=()):
@@ -29,35 +71,71 @@ def prepare_scene(output=ASSETS, extra_angles=()):
 
 
 def run_condition(folder, steps, weight, training_scene=ASSETS):
+    import hashlib
+    import subprocess
     import torch
-    from generate_sphere import orbit_rotation
-    from model import MipNeRF
-    from train import train
-    from two_spheres_canny import scene
+    import train as training
 
     start = perf_counter()
     views = len(json.loads((training_scene / "transforms_train.json").read_text())["frames"])
-    train(views, training_scene, folder, depth_weight=weight, depth_weight_start=weight,
-          stop_after=steps, scale=2, regnerf_density=True)
+    root = Path(__file__).resolve().parents[1]
+    try:
+        revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True)
+        changes = subprocess.run(["git", "diff", "HEAD", "--", "train.py", "model.py", "data.py",
+                                  "two_spheres_canny.py", "notebooks/toy_experiment.py"],
+                                 cwd=root, capture_output=True, text=True)
+        code_revision = revision.stdout.strip() if revision.returncode == 0 else "unknown"
+        local_changes = changes.stdout if changes.returncode == 0 else "unknown (no Git checkout)"
+    except FileNotFoundError:
+        code_revision, local_changes = "unknown", "unknown (Git is not installed)"
+    provenance = dict(code_revision=code_revision, local_changes=local_changes,
+                      code_sha256={name: hashlib.sha256((root/name).read_bytes()).hexdigest()
+                                   for name in ("train.py", "model.py", "data.py", "two_spheres_canny.py", "notebooks/toy_experiment.py")},
+                      seed=TOY_SEED, evaluation_scale=2, heldout_camera=dict(angle=15, elevation=5),
+                      coarse_weight=0.1 if weight else 0.0, views=views,
+                      training_transforms=json.loads((training_scene / "transforms_train.json").read_text()),
+                      checkpoint=str((folder / "mipnerf_final.pt").resolve()))
+    training.train(views, training_scene, folder, depth_weight=weight, depth_weight_start=weight,
+          stop_after=steps, scale=2, regnerf_density=True, seed=TOY_SEED)
     train_seconds = perf_counter() - start
-    _, rays, _, _, _ = scene(orbit_rotation(15, 5))
+    result = dict(steps=steps, fine_weight=weight, training_seconds=train_seconds,
+                  device="cuda" if torch.cuda.is_available() else "cpu", **provenance)
+    render_condition_view(folder / "mipnerf_final.pt", folder, CAMERAS["Front view"], result)
+    render_condition_view(folder / "mipnerf_final.pt", folder / "lower", CAMERAS["Lower view"], result)
+    result = json.loads((folder / "result.json").read_text())
+    result["total_seconds"] = perf_counter() - start
+    (folder / "result.json").write_text(json.dumps(result, indent=2))
+    return result
+
+
+def render_condition_view(checkpoint, folder, camera, training_result):
+    """Render a fixed camera from a checkpoint. Do not train or select settings."""
+    import torch
+    from generate_sphere import orbit_rotation
+    from model import MipNeRF
+    from two_spheres_canny import scene
+
+    start = perf_counter()
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    _, rays, target, truth, ids = scene(orbit_rotation(*camera))
+    target, truth, ids = target[::2, ::2], truth[::2, ::2].astype("float32"), ids[::2, ::2]
+    hit = ids > 0
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = MipNeRF().to(device).eval()
-    model.load_state_dict(torch.load(folder / "mipnerf_final.pt", map_location=device, weights_only=True))
+    model.load_state_dict(torch.load(checkpoint, map_location=device, weights_only=True))
     fields = [r[::2, ::2].reshape(-1, r.shape[-1]).to(device).split(512) for r in rays]
     with torch.inference_mode():
         batches = [model(*r, return_depth=True)[1:] for r in zip(*fields)]
     rgb, depth = (torch.cat(items).cpu().numpy() for items in zip(*batches))
-    with np.load(ASSETS / "reference.npz") as ref:
-        hit = ref["ids"] > 0
-        depth = depth.reshape(hit.shape)
-        mae = float(np.abs(depth[hit] - ref["depth"][hit]).mean())
+    depth = depth.reshape(hit.shape)
+    mae = float(np.abs(depth[hit] - truth[hit]).mean())
     rgb = rgb.reshape(*hit.shape, 3)
-    target = np.asarray(Image.open(ASSETS / "reference.png")) / 255.
-    psnr = float(-10 * np.log10(np.mean((rgb[hit] - target[hit]) ** 2)))
+    psnr = float(-10 * np.log10(np.mean((rgb[hit] - target[hit] / 255.) ** 2)))
     Image.fromarray(np.rint(rgb.clip(0, 1) * 255).astype("uint8")).save(folder / "rgb.png")
     np.savez_compressed(folder / "prediction.npz", depth=depth)
-    result = dict(steps=steps, fine_weight=weight, depth_mae=mae, foreground_psnr=psnr,
-                  training_seconds=train_seconds, total_seconds=perf_counter()-start, device=device.type)
+    result = dict(training_result, depth_mae=mae, foreground_psnr=psnr,
+                  heldout_camera=dict(angle=camera[0], elevation=camera[1]),
+                  render_seconds=perf_counter()-start)
     (folder / "result.json").write_text(json.dumps(result, indent=2))
     return result

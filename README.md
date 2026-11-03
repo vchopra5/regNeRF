@@ -11,8 +11,12 @@ Both experiments train on three RGB views. Each pair changes one setting.
 
 Run the DTU scan 40 comparison from the project root.
 
+Follow the [DTU data and training guide](docs/dtu_test.md) to download scan 40, check its files, train a new pair, and save the evaluation record. It also contains a task for another agent.
+
+Read the settings before training:
+
 ```sh
-python compare_depth.py --run
+python compare_depth.py
 ```
 
 The script trains the depth-on model first. It reports mean foreground PSNR across 25 test views for each model. A higher score means a closer match to the reference RGB images. Canny is off in both runs.
@@ -30,3 +34,14 @@ You can supply another synthetic scene with training images and a `transforms_tr
 Both models use the same depth weights and sample patches from unseen cameras. The Canny run renders RGB for each sampled patch. It skips a horizontal or vertical depth difference if either pixel touches a detected edge. RGB supervision stays active. The script saves the models in the `regnerf` and `canny` subfolders.
 
 Omit `--run` from either command to read the settings. Use a new output folder to keep earlier checkpoints.
+
+## Toy notebook
+
+Open the interactive lesson from a fresh checkout:
+
+```sh
+python -m pip install -r requirements-notebooks.txt
+python -m notebooks.open_toy
+```
+
+The small saved-results archive and figures are included. Opening the lesson does not need checkpoints, DTU data, or training. Install PyTorch only for optional new training. See [the notebook guide](notebooks/README.md) for details.

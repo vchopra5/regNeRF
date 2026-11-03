@@ -101,7 +101,7 @@ def training_matmul_precision():
 def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), depth_weight=DEPTH_WEIGHT,
           stop_after=None, after_step=None, background=None, density_noise_std=None,
           regnerf_density=None, use_all_synthetic_poses=False, depth_weight_start=DEPTH_WEIGHT_START,
-          edge_strength=0.0, training_edge_masks=None, virtual_canny=False, scale=None):
+          edge_strength=0.0, training_edge_masks=None, virtual_canny=False, scale=None, seed=None):
     if virtual_canny and (edge_strength or training_edge_masks is not None):
         raise ValueError("Use one edge mask method at a time.")
     if not math.isfinite(edge_strength) or edge_strength < 0:
@@ -109,8 +109,9 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     if not math.isfinite(depth_weight_start) or depth_weight_start < 0:
         raise ValueError("The starting depth weight must be finite and nonnegative.")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    torch.manual_seed(SEED)
-    rng = np.random.default_rng(SEED)
+    seed = SEED if seed is None else seed
+    torch.manual_seed(seed)
+    rng = np.random.default_rng(seed)
 
 
     device = torch.device(
@@ -141,7 +142,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
         rgb_views[index] = (images[index].reshape(-1, 3).to(device),
                             tuple(field.reshape(-1, field.shape[-1]) for field in fields))
     if depth_weight != 0:
-        depth_rng = torch.Generator(device=device).manual_seed(SEED + 1)
+        depth_rng = torch.Generator(device=device).manual_seed(seed + 1)
     if training_edge_masks is not None:
         if edge_strength or is_dtu or training_edge_masks.shape != images.shape[:3]:
             raise ValueError("Training edge masks need matching synthetic views and edge_strength=0.")
