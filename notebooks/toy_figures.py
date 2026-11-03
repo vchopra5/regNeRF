@@ -56,6 +56,17 @@ class Board:
     def polygon(self, points, fill):
         self._pen.polygon(_scaled(points), fill=fill)
 
+    def bar(self, xy, fill, radius=4, end="right"):
+        """A bar rounded only at its value end; the baseline end stays square."""
+        x0, y0, x1, y1 = xy
+        if abs(x1 - x0) < 0.5 or abs(y1 - y0) < 0.5:
+            return
+        corners = {"right": (False, True, True, False), "top": (True, True, False, False),
+                   "bottom": (False, False, True, True)}[end]
+        radius = min(radius, abs(x1 - x0) / 2, abs(y1 - y0) / 2)
+        self._pen.rounded_rectangle(_scaled((min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))),
+                                    radius=radius * SCALE, fill=fill, corners=corners)
+
     def paste(self, picture, xy, size):
         """Paste an image at a display position and size. Keep its pixels sharp."""
         picture = picture.convert("RGB").resize((size[0] * SCALE, size[1] * SCALE), Image.Resampling.NEAREST)
