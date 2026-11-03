@@ -36,7 +36,7 @@ def pixel_rays(H, W, focal, pose, x, y):
 
 
 def load_data(scene_dir, split="train", scale=1):
-    rng = np.random.default_rng(42)
+    """Return images, camera-to-world poses, and one set of intrinsics per view."""
     scene_dir = Path(scene_dir)
     if (scene_dir / "cameras.npz").is_file():
         from dtu import load_views
@@ -84,6 +84,6 @@ def load_data(scene_dir, split="train", scale=1):
     return (
         torch.from_numpy(images),
         torch.from_numpy(poses),
-        float(focal)
+        [float(focal)] * len(frames)
     )
 

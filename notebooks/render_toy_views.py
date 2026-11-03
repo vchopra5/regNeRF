@@ -14,7 +14,7 @@ def main():
     parser.add_argument("--checkpoint-root", type=Path, default=Path("checkpoint/toy_two_spheres_v1"))
     args = parser.parse_args()
     from generate_sphere import orbit_rotation
-    from two_spheres_canny import scene
+    from two_spheres import scene
     output = ASSETS / "lower"
     output.mkdir(parents=True, exist_ok=True)
     _, _, rgb, depth, ids = scene(orbit_rotation(*CAMERAS["Lower view"]))

@@ -6,32 +6,28 @@ import hashlib
 import io
 import json
 from pathlib import Path
-import subprocess
 from datetime import datetime, timezone
 
 import torch
 
-from eval_dtu import evaluate
+from eval_dtu import EVAL_SCALE, evaluate
 from notebooks.lab import ROOT
+from provenance import git
 import dtu
-
-
-def git(*args):
-    try:
-        result = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
-                                encoding="utf-8", errors="replace")
-        return result.stdout if result.returncode == 0 else "unknown"
-    except FileNotFoundError:
-        return "unknown"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--off-checkpoint", type=Path, default=ROOT / "checkpoint/scan40_pair/off/checkpoint_40000.pt")
-    parser.add_argument("--on-checkpoint", type=Path, default=ROOT / "checkpoint/scan40_pair/on/checkpoint_40000.pt")
-    parser.add_argument("--step", type=int, default=40000)
+    # The defaults name the older local step-40000 pair that notebook 02 displays.
+    # For a pair from compare_depth.py, give both paths, --step 20000, and --training-record.
+    legacy = "Default: the older local step-40000 pair."
+    parser.add_argument("--off-checkpoint", type=Path, default=ROOT / "checkpoint/scan40_pair/off/checkpoint_40000.pt",
+                        help=legacy)
+    parser.add_argument("--on-checkpoint", type=Path, default=ROOT / "checkpoint/scan40_pair/on/checkpoint_40000.pt",
+                        help=legacy)
+    parser.add_argument("--step", type=int, default=40000, help=legacy)
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data/dtu/scan40")
-    parser.add_argument("--scale", type=int, default=2)
+    parser.add_argument("--scale", type=int, default=EVAL_SCALE)
     parser.add_argument("--output", type=Path, default=ROOT / "notebooks/results/scan40.json")
     parser.add_argument("--training-record", type=Path)
     parser.add_argument("--check-only", action="store_true", help="Check checkpoint steps without rendering or training.")
@@ -77,7 +73,7 @@ def main():
         "scene": args.data_dir.name, "step": args.step, "evaluation_scale": args.scale,
         "device": device, "evaluation_utc": datetime.now(timezone.utc).isoformat(),
         "checkpoints": {name: str(path.resolve()) for name, path in paths.items()},
-        "checkpoint_sha256": hashes, "evaluation_revision": git("rev-parse", "HEAD").strip(),
+        "checkpoint_sha256": hashes, "evaluation_revision": git("rev-parse", "HEAD"),
         "evaluation_status": git("status", "--short"), "evaluation_local_diff": git("diff", "--", "*.py"),
         "training_provenance": "Unknown. Existing checkpoints do not store training settings or code revision.",
         "required_training_views": [25, 22, 28], "required_seed": 42,

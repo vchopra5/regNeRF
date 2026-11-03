@@ -10,16 +10,15 @@ from PIL import Image
 
 import dtu
 from data import get_rays
-from model import MipNeRF
+from model import load_model, render_rays
 from render import positive_int
+
+EVAL_SCALE = 2
 
 
 @torch.inference_mode()
 def evaluate(checkpoint, scene, scale, batch_size, device, *, return_per_view=False):
-    model = MipNeRF(near=dtu.BOUNDS[0], far=dtu.BOUNDS[1])
-    saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
-    model.load_state_dict(saved.get("model", saved))
-    model.to(device).eval()
+    model = load_model(checkpoint, device, near=dtu.BOUNDS[0], far=dtu.BOUNDS[1])
     scores = []
     print(f"Checkpoint {checkpoint} | scene {scene} | scale {scale}", flush=True)
     with np.load(scene / "cameras.npz") as cameras:
@@ -37,12 +36,8 @@ def evaluate(checkpoint, scene, scale, batch_size, device, *, return_per_view=Fa
                 raise ValueError(f"Empty foreground mask for view {index}.")
             target = torch.from_numpy(np.asarray(rgb)[mask]).to(device).float() / 255
             rays = [field[mask] for field in get_rays(h, w, intrinsics, pose)]
-            squared_error = torch.zeros((), device=device, dtype=torch.float64)
-            for start in range(0, count, batch_size):
-                batch = slice(start, start + batch_size)
-                _, prediction = model(*(r[batch].to(device) for r in rays))
-                squared_error += (prediction - target[batch]).square().sum(dtype=torch.float64)
-            mse = squared_error.item() / (count * 3)
+            prediction = render_rays(model, rays, batch_size, device)
+            mse = (prediction - target).square().sum(dtype=torch.float64).item() / (count * 3)
             if not math.isfinite(mse):
                 raise ValueError(f"Non-finite RGB error for view {index}.")
             score = -10 * math.log10(mse) if mse else math.inf
@@ -59,7 +54,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", required=True, type=Path)
     parser.add_argument("--data-dir", type=Path, default=Path("data/dtu/scan40"))
-    parser.add_argument("--scale", type=positive_int, default=2)
+    parser.add_argument("--scale", type=positive_int, default=EVAL_SCALE)
     parser.add_argument("--batch-size", type=positive_int, default=512)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()

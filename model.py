@@ -331,8 +331,8 @@ class MipNeRF(nn.Module):
 
         return rgb_map, weights
 
-    def forward(self, rays_o, rays_d, radii, return_depth=False, *, return_depth_and_opacity=False,
-                return_depth_levels=False, return_patch_rgb=False, generator=None):
+    def forward(self, rays_o, rays_d, radii, return_depth=False, *, return_depth_levels=False,
+                generator=None):
         # Expect a batch of flattened rays
         # rays_o: [B, 3]
         # rays_d: [B, 3]
@@ -365,16 +365,29 @@ class MipNeRF(nn.Module):
 
         # 4. Fine rendering (same MLP)
         fine_rgb, fine_weights = self.render_pass(
-            rays_o, rays_d, radii, t_fine, generator, depth_only=return_depth_levels and not return_patch_rgb
+            rays_o, rays_d, radii, t_fine, generator, depth_only=return_depth_levels
         )
 
         if return_depth_levels:
-            levels = ray_depth(coarse_weights, t_coarse), ray_depth(fine_weights, t_fine)
-            return (levels, fine_rgb.detach()) if return_patch_rgb else levels
-        if return_depth or return_depth_and_opacity:
-            fine_depth, opacity = ray_depth(fine_weights, t_fine)
-            if return_depth_and_opacity:
-                return coarse_rgb, fine_rgb, fine_depth, opacity
-            return coarse_rgb, fine_rgb, fine_depth
+            return ray_depth(coarse_weights, t_coarse), ray_depth(fine_weights, t_fine)
+        if return_depth:
+            return coarse_rgb, fine_rgb, ray_depth(fine_weights, t_fine)[0]
 
         return coarse_rgb, fine_rgb
+
+
+def render_rays(model, rays, chunk_size, device=None, *, return_depth=False):
+    """Render flattened rays in chunks. Return fine RGB, plus fine depth if requested."""
+    outputs = []
+    for batch in zip(*(ray.split(chunk_size) for ray in rays)):
+        outputs.append(model(*(ray.to(device) for ray in batch), return_depth=return_depth)[1:])
+    parts = [torch.cat(items) for items in zip(*outputs)]
+    return tuple(parts) if return_depth else parts[0]
+
+
+def load_model(path, device, **settings):
+    """Load a final state dict or a training checkpoint for evaluation."""
+    saved = torch.load(path, map_location="cpu", weights_only=True)
+    model = MipNeRF(**settings)
+    model.load_state_dict(saved.get("model", saved))
+    return model.to(device).eval()

@@ -116,7 +116,9 @@ checkpoint/scan40_pair_new/on/checkpoint_20000.pt
 
 Reusing an output directory replaces checkpoints with matching names. A partial directory is not proof of a completed pair. Confirm that both step-20000 checkpoints exist. The current script starts training from the beginning; it does not resume a partial run.
 
-The comparison command also prints scores at scale 4. Use the scale-2 evaluation below for the final record. Do not mix those two scales.
+The comparison command also prints scores at scale 2, the same scale as the final evaluation. It scores `mipnerf_final.pt`, which holds the same weights as `checkpoint_20000.pt`. Use the evaluation below for the final record, because it also saves per-view scores and hashes.
+
+`--run` needs `--output-dir`. This stops a run from replacing the older pair in `checkpoint/scan40_pair`.
 
 ## 5. Evaluate both checkpoints at scale 2
 
