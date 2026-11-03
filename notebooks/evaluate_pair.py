@@ -1,4 +1,8 @@
-"""Evaluate the existing scan 40 pair without training."""
+"""Evaluate a scan 40 pair from compare_depth.py without training.
+
+With no arguments, it evaluates checkpoint/scan40_pair_new at the final step, checks it
+against that folder's protocol.json, and writes notebooks/results/scan40.json for notebook 2.
+"""
 
 import argparse
 import contextlib
@@ -12,30 +16,31 @@ import torch
 
 from eval_dtu import EVAL_SCALE, evaluate
 from notebooks.lab import ROOT
+from train import NUM_STEPS
 from provenance import git
 import dtu
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    # The defaults name the older local step-40000 pair that notebook 02 displays.
-    # For a pair from compare_depth.py, give both paths, --step 20000, and --training-record.
-    legacy = "Default: the older local step-40000 pair."
-    parser.add_argument("--off-checkpoint", type=Path, default=ROOT / "checkpoint/scan40_pair/off/checkpoint_40000.pt",
-                        help=legacy)
-    parser.add_argument("--on-checkpoint", type=Path, default=ROOT / "checkpoint/scan40_pair/on/checkpoint_40000.pt",
-                        help=legacy)
-    parser.add_argument("--step", type=int, default=40000, help=legacy)
+    parser.add_argument("--pair-dir", type=Path, default=ROOT / "checkpoint/scan40_pair_new",
+                        help="Output folder of compare_depth.py, with off/, on/, and protocol.json.")
+    parser.add_argument("--step", type=int, default=NUM_STEPS)
+    parser.add_argument("--off-checkpoint", type=Path, help="Default: PAIR_DIR/off/checkpoint_STEP.pt")
+    parser.add_argument("--on-checkpoint", type=Path, help="Default: PAIR_DIR/on/checkpoint_STEP.pt")
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data/dtu/scan40")
     parser.add_argument("--scale", type=int, default=EVAL_SCALE)
     parser.add_argument("--output", type=Path, default=ROOT / "notebooks/results/scan40.json")
-    parser.add_argument("--training-record", type=Path)
+    parser.add_argument("--training-record", type=Path, help="Default: PAIR_DIR/protocol.json, if present.")
     parser.add_argument("--check-only", action="store_true", help="Check checkpoint steps without rendering or training.")
     args = parser.parse_args()
     if min(args.step, args.scale) < 1:
         parser.error("The step and scale must be positive.")
     output = args.output
-    paths = {"off": args.off_checkpoint, "on": args.on_checkpoint}
+    paths = {name: getattr(args, f"{name}_checkpoint") or args.pair_dir / name / f"checkpoint_{args.step}.pt"
+             for name in ("off", "on")}
+    if args.training_record is None and (args.pair_dir / "protocol.json").is_file():
+        args.training_record = args.pair_dir / "protocol.json"
     for path in paths.values():
         if not path.is_file():
             raise FileNotFoundError(path)

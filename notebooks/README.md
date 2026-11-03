@@ -71,23 +71,20 @@ To measure this on another CPU, run `python -m notebooks.benchmark_toy_cpu --ste
 
 ## Prepare the paper evidence
 
-Before the review, evaluate the existing scan 40 pair:
+Notebook 2 reads the model results from `notebooks/results/`, which is in Git, and the DTU photos from `data/dtu/scan40`, which is not. **Before the lab, each student runs `uv run python prepare_dtu.py --download`** (about 120 MB, under a minute, no account needed). The checkpoints are not needed.
 
-```powershell
-python -m notebooks.evaluate_pair
+Prepare the results once, before the lab:
+
+```sh
+uv run python prepare_dtu.py --download
+uv run python compare_depth.py --output-dir checkpoint/scan40_pair_new --run
+uv run python -m notebooks.evaluate_pair
+uv run python -m notebooks.render_scan40_views
 ```
 
-The command uses the local GPU if available. It evaluates both step-40000
-checkpoints at scale 2 and saves `notebooks/results/scan40.json` and raw logs.
-It does not run training. It records missing training provenance as unknown.
-The existing images have no complete provenance record. Treat them as inspection
-material until the model pair is verified. A numerical evaluation alone cannot
-recover the original seed, settings, or training code state.
+Training the pair takes about 1 to 1.5 hours on a laptop GPU: about 46 minutes for the depth-on model and less for the depth-off model. Evaluation and rendering take about 10 minutes. `compare_depth.py` records the code revision and settings in `protocol.json` before training. `evaluate_pair` checks the pair against that record and writes `notebooks/results/scan40.json`. `render_scan40_views` writes the view-45 renders to `notebooks/results/scan40/`. Missing files and photos show a warning with the command that makes them.
 
-For a new controlled training pair, first record the code revision and local
-changes. Read the protocol with `python compare_depth.py`. Start training only
-when requested. Use a new output directory to preserve existing models.
-Evaluate both saved models at scale 2 with `eval_dtu.py`.
+Open the notebook with `env PYTHONPATH=$PWD uv run marimo run notebooks/02_paper.py` (fish) or `PYTHONPATH=$PWD uv run marimo run notebooks/02_paper.py` (bash, zsh).
 
 ## Sources and limits
 

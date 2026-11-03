@@ -122,10 +122,12 @@ The comparison command also prints scores at scale 2, the same scale as the fina
 
 ## 5. Evaluate both checkpoints at scale 2
 
-Check the stored step numbers first:
+`notebooks.evaluate_pair` reads `checkpoint/scan40_pair_new` by default: the step-20000 checkpoints in `off/` and `on/`, and `protocol.json`. Give `--pair-dir` and `--step` for another pair.
+
+Check the stored step numbers and the training record first:
 
 ```sh
-python -m notebooks.evaluate_pair --off-checkpoint checkpoint/scan40_pair_new/off/checkpoint_20000.pt --on-checkpoint checkpoint/scan40_pair_new/on/checkpoint_20000.pt --step 20000 --training-record checkpoint/scan40_pair_new/protocol.json --check-only
+python -m notebooks.evaluate_pair --check-only
 ```
 
 Run `eval_dtu.py` for each saved model:
@@ -135,17 +137,25 @@ python eval_dtu.py --checkpoint checkpoint/scan40_pair_new/off/checkpoint_20000.
 python eval_dtu.py --checkpoint checkpoint/scan40_pair_new/on/checkpoint_20000.pt --scale 2
 ```
 
-To save full-precision per-view scores, both means, the signed difference, checkpoint hashes, and training records in one file, run:
+To save full-precision per-view scores, both means, the signed difference, checkpoint hashes, and the training record in one file, run:
 
 ```sh
-python -m notebooks.evaluate_pair --off-checkpoint checkpoint/scan40_pair_new/off/checkpoint_20000.pt --on-checkpoint checkpoint/scan40_pair_new/on/checkpoint_20000.pt --step 20000 --scale 2 --training-record checkpoint/scan40_pair_new/protocol.json --output checkpoint/scan40_pair_new/evaluation_scale2.json
+python -m notebooks.evaluate_pair
 ```
 
-This command evaluates the pair again and saves two text logs beside the JSON file. It does not train. For an automated run, the combined command can replace the two separate evaluation calls because it calls the same `eval_dtu.evaluate` function for each checkpoint.
+It writes `notebooks/results/scan40.json`, which notebook 2 reads, and two text logs beside it. It evaluates at scale 2. It does not train. For an automated run, the combined command can replace the two separate evaluation calls because it calls the same `eval_dtu.evaluate` function for each checkpoint.
 
 The report uses the arithmetic mean of **25 per-view foreground RGB PSNR values**. It does not use training-batch PSNR or pooled error over all test pixels. Report `on minus off` in dB. Report a tie or decline as measured. RGB PSNR alone does not establish better geometry. A geometry claim needs separate reference depth or geometry and an appropriate error measure.
 
-The no-argument `python -m notebooks.evaluate_pair` command is for the older local step-40000 pair. Those checkpoints are not included in Git. Supply the arguments above for a new pair. Do not treat a 20,000-step run as a reproduction of the older 40,000-step run.
+Then save the renders that notebook 2 shows: held-out view 45 from both models:
+
+```sh
+python -m notebooks.render_scan40_views
+```
+
+It writes `notebooks/results/scan40/` with a record of the checkpoints it used. It does not train. It saves no DTU photos; notebook 2 reads those from `data/dtu/scan40`.
+
+Earlier results came from an older step-40000 pair with no training record. Do not treat a 20,000-step run as a reproduction of that run.
 
 ## 6. Task for another agent
 
@@ -163,8 +173,8 @@ photos or masks to select parameters. Use separate depth sampling randomness.
 Train both conditions in a new checkpoint/scan40_pair_new directory with
 compare_depth.py --run. Preserve the protocol.json file. Check that both
 checkpoint_20000.pt files exist and contain step 20000. Evaluate both at
-scale 2. Use notebooks.evaluate_pair with explicit checkpoint paths, step,
-training-record, and output arguments to save the final report.
+scale 2 with python -m notebooks.evaluate_pair, then save the notebook images
+with python -m notebooks.render_scan40_views.
 Return the code revision and local changes, data source and hashes, seed,
 weights, settings, checkpoint paths and hashes, all 25 per-view foreground
 PSNR scores for each model, both arithmetic means, and signed on-minus-off

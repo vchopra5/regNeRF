@@ -1,165 +1,324 @@
 import marimo
 
 __generated_with = "0.25.2"
-app = marimo.App(width="medium")
+app = marimo.App(width="medium", app_title="RegNeRF on DTU scan 40")
 
 
 @app.cell
 def _():
     import json
+
     import marimo as mo
-    from notebooks.lab import PAPER, ROOT
+    import numpy as np
+    from PIL import Image
+
     import dtu
-    return PAPER, ROOT, dtu, json, mo
+    from notebooks.lab import PAPER, ROOT
+
+    results = ROOT / "notebooks" / "results"
+    images = results / "scan40"
+    scan = ROOT / "data" / "dtu" / "scan40" / "image"
+
+    def photo(index, width=400):
+        """A small copy of one DTU photo, made in memory. The photos stay out of Git."""
+        with Image.open(scan / f"{index:06}.png") as source:
+            source = source.convert("RGB")
+            return source.resize((width, round(source.height * width / source.width)), Image.Resampling.LANCZOS)
+
+    def no_photos():
+        return mo.callout(
+            mo.md("**The DTU photos are not downloaded yet.** They are not in Git. Run this once "
+                  "(about 120 MB, under a minute):\n\n```sh\nuv run python prepare_dtu.py --download\n```"),
+            kind="warn",
+        )
+
+    def result(text, kind="info", title="What this shows"):
+        return mo.callout(mo.md(text), kind=kind, title=title)
+
+    def stat(value, label, caption=None):
+        return mo.stat(value, label=label, caption=caption, bordered=True)
+
+    def missing(what, command):
+        return mo.callout(
+            mo.md(f"**{what} not saved yet.** Run this before the lab:\n\n```sh\n{command}\n```"),
+            kind="warn",
+        )
+
+    return PAPER, dtu, images, json, missing, mo, no_photos, np, photo, result, results, scan, stat
 
 
 @app.cell
 def _(PAPER, mo):
-    mo.md(f"""
-    # 2. Does the effect transfer to sparse views?
-    **Time: 25 minutes.** Read `01_toy.py` first. Continue with `03_extension.py`.
+    mo.md(
+        f"""
+        # Depth smoothing on real photos
+        Notebook 1 showed that depth smoothing improves the shape of two spheres. Does it also help
+        on photographs of a real object?
 
-    **Target:** A single-scan investigation of RegNeRF Table 3.
-    The paper reports an aggregate benchmark result. This project uses
-    DTU scan 40, the stone arch from Figure 3, with a different training setup.
-    Earlier scan 114 files show Buddha. They are excluded here.
+        **The test.** [DTU](https://roboimagedata.compute.dtu.dk/) scan 40, the stone arch in
+        [RegNeRF Figure 3]({PAPER}). Two models train on the same 3 photos with the same settings.
+        One adds RegNeRF's depth smoothing. Both are scored on 25 photos they never saw.
 
-    [Read the paper: Table 3 and Figure 3]({PAPER}).
+        **How to use this page.** Everything uses saved results, so nothing trains. Read each
+        section, then the box beside it. Allow about 25 minutes.
 
-    **Prediction:** If the mechanism from Notebook 1 transfers, depth
-    regularization can improve colour prediction from new camera positions.
-    This prediction can fail. Colour PSNR does not measure depth accuracy.
-    """)
+        **Prediction.** If notebook 1 transfers, smoothing should improve the colour seen from new
+        cameras. This can fail: colour PSNR does not measure the shape directly.
+        """
+    )
     return
 
 
 @app.cell
-def _(mo):
-    mo.vstack([
-        mo.md("## Published reference: Table 3\nThese are paper values, not local measurements."),
-        mo.ui.table([
-            {"Paper condition": "Without scene space annealing", "PSNR (dB)": 10.17},
-            {"Paper condition": "Without geometry regularization", "PSNR (dB)": 14.34},
-            {"Paper condition": "Without appearance regularization", "PSNR (dB)": 18.34},
-            {"Paper condition": "Full method", "PSNR (dB)": 18.89},
-        ], selection=None),
-        mo.md("""
-        The full method exceeds the row without geometry regularization by
-        4.55 dB. Our local pair does not reproduce all Table 3 conditions.
-        It tests the effect of the depth weight in the local implementation.
-        Do not compare one scan directly with the benchmark mean.
-        """),
-    ])
+def _(PAPER, mo, result):
+    _rows = [
+        {"Paper condition": "Full RegNeRF", "PSNR (dB)": 18.89},
+        {"Paper condition": "Without appearance regularization", "PSNR (dB)": 18.34},
+        {"Paper condition": "Without geometry regularization", "PSNR (dB)": 14.34},
+        {"Paper condition": "Without sample-space annealing", "PSNR (dB)": 10.17},
+    ]
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+                ---
+                ## 1. What the paper reports
+                RegNeRF's ablation ([Table 3]({PAPER})) removes one part at a time. These are the
+                paper's values, averaged over many DTU scans, not measurements from this repo.
+                """
+            ),
+            mo.hstack(
+                [
+                    mo.ui.table(_rows, selection=None, show_column_summaries=False),
+                    result(
+                        "Removing the geometry (depth) regularization costs **4.55 dB**. Removing the "
+                        "appearance loss costs only 0.55 dB.\n\n"
+                        "This repo has no appearance loss, so **both of our models lack it**. Our pair "
+                        "therefore matches no row pair exactly. It asks a narrower question: on one scan, "
+                        "with this code, does adding depth smoothing help?",
+                        title="How to read it",
+                    ),
+                ],
+                widths=[1, 1],
+                align="center",
+                gap=1.5,
+                wrap=True,
+            ),
+        ]
+    )
     return
 
 
 @app.cell
-def _(ROOT, mo):
-    _photos = [ROOT / "data/dtu/scan40/image" / f"{_i:06}.png" for _i in (25, 22, 28)]
-    mo.vstack([
-        mo.md("## Three training views\nUse these photos for training. Keep all test photos and masks out of parameter selection."),
-        mo.hstack([mo.vstack([mo.md(f"View {_i}"), mo.image(str(_p), width=210)])
-                   for _i, _p in zip((25, 22, 28), _photos) if _p.exists()]),
-    ])
+def _(dtu, mo, no_photos, photo, scan):
+    _views = dtu.TRAIN_IDS[:3]
+    _body = (
+        mo.hstack(
+            [mo.image(photo(i), width=300, caption=f"View {i}") for i in _views],
+            justify="start",
+            gap=1,
+            wrap=True,
+        )
+        if all((scan / f"{i:06}.png").is_file() for i in _views)
+        else no_photos()
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+                ---
+                ## 2. The three training photos
+                Both models see only these views ({", ".join(map(str, _views))}). **Watch** which parts
+                of the arch each photo shows, and which parts no photo shows. The 25 test photos and
+                their masks are never used for training or for choosing settings.
+                """
+            ),
+            _body,
+        ]
+    )
     return
 
 
 @app.cell
-def _(ROOT, dtu, mo):
-    _off = ROOT / "renders/scan40_pair/view45_depth_off.png"
-    _on = ROOT / "renders/scan40_pair/view45_depth_on.png"
-    _target = ROOT / "data/dtu/scan40/image/000045.png"
-    mo.vstack([
-        mo.md("""
-        ## Saved qualitative example: held-out view 45
-        These existing render files are for inspection. Their filenames do not
-        prove the training revision or settings. Do not use them to select a
-        model or a depth weight. Verify the pair with the evaluation record below.
-        """),
-        mo.hstack([mo.vstack([mo.md(_label), mo.image(str(_path), width=210)])
-                   for _label, _path in [("Depth off", _off), ("Depth on", _on), ("Reference photo", _target)]
-                   if _path.exists()]),
-        mo.md(f"""
-        **Evaluation IDs from `dtu.py`:** {', '.join(map(str, dtu.TEST_IDS))}.
+def _(images, json, missing, mo, no_photos, photo, result, scan):
+    _record_file = images / "render_record.json"
+    if _record_file.is_file():
+        _record = json.loads(_record_file.read_text())
+        _view = _record["view"]
 
-        View 45 is a fixed illustration. The score must include all 25 test views.
-        Inspect missing structure and colour errors. Describe only what is visible.
-        Use reference depth for a geometry conclusion.
-        """),
-    ])
-    return
+        def _image(name, caption):
+            return mo.image(str(images / f"view{_view}_{name}.png"), width=330, caption=caption)
 
-
-@app.cell
-def _(ROOT, dtu, json, mo):
-    _record = ROOT / "notebooks/results/scan40.json"
-    if _record.exists():
-        result = json.loads(_record.read_text())
-        _rows = result["per_view"]
-        if len(_rows) != 25 or tuple(_r["view"] for _r in _rows) != dtu.TEST_IDS:
-            raise ValueError("The result must contain the 25 test IDs in protocol order.")
-        _off_mean = sum(_r["off_db"] for _r in _rows) / 25
-        _on_mean = sum(_r["on_db"] for _r in _rows) / 25
-        _delta = _on_mean - _off_mean
-        _outcome = "increase" if _delta > 0 else "decrease" if _delta < 0 else "tie"
-        mo.output.replace(mo.vstack([
-            mo.md(f"""
-            ## Local measurement
-            Off: **{_off_mean:.3f} dB**. On: **{_on_mean:.3f} dB**.
-            On minus off: **{_delta:+.3f} dB** ({_outcome}).
-            This is the arithmetic mean of 25 foreground RGB PSNR values.
-            It is not training batch PSNR.
-            """),
-            mo.ui.table(_rows, selection=None),
-            mo.accordion({"Evaluation record and limits": mo.md("```json\n" + json.dumps(result["record"], indent=2) + "\n```")}),
-        ]))
+        _reference = (mo.image(photo(_view), width=330, caption="Real photo")
+                      if (scan / f"{_view:06}.png").is_file() else no_photos())
+        _body = mo.vstack(
+            [
+                mo.hstack(
+                    [_reference, _image("rgb_off", "Smoothing off"), _image("rgb_on", "Smoothing on")],
+                    widths="equal",
+                    gap=0.5,
+                ),
+                mo.hstack(
+                    [mo.md(""), _image("depth_off", "Depth, smoothing off"),
+                     _image("depth_on", "Depth, smoothing on")],
+                    widths="equal",
+                    gap=0.5,
+                ),
+                mo.md(
+                    f"<small>Depth: light is near, dark is far. Both depth images use the same range, "
+                    f"{_record['depth_range'][0]:.2f} to {_record['depth_range'][1]:.2f} scene units. "
+                    f"Step {_record['step']}, scale {_record['scale']}.</small>"
+                ),
+                result(
+                    "**Describe only what you can see.** Where does each model miss structure or put "
+                    "the wrong colour? Where does the depth change suddenly without an edge in the photo? "
+                    "One view is an illustration. The score in section 4 uses all 25 test views.",
+                    kind="neutral",
+                    title="Look and compare",
+                ),
+            ]
+        )
+        _view_text = f"held-out view {_view}"
     else:
-        mo.output.replace(mo.md("""
-        ## Local measurement: not yet verified
-        No evaluation record is present. The saved images above do not establish
-        a numerical result or a completed Table 3 reproduction.
+        _body = missing("The view renders are", "uv run python -m notebooks.render_scan40_views")
+        _view_text = "one held-out view"
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+                ---
+                ## 3. One new camera
+                Both models render {_view_text}, a camera they never saw. **Watch** the arch's opening and
+                its edges in the colour images, then the depth images below them.
+                """
+            ),
+            _body,
+        ]
+    )
+    return
 
-        Before the review, run this command from the project root:
 
-        ```text
-        python -m notebooks.evaluate_pair
-        ```
-
-        It evaluates both saved step-40000 models at scale 2. It uses
-        `eval_dtu.py` for each model. It does not train a model. It saves all
-        25 scores per condition, checkpoint hashes, and the evaluation code state.
-        It cannot recover missing training records. Reload this notebook after it finishes.
-        """))
+@app.cell
+def _(dtu, json, missing, mo, np, result, results, stat):
+    _file = results / "scan40.json"
+    _command = "uv run python -m notebooks.evaluate_pair"
+    if _file.is_file():
+        _data = json.loads(_file.read_text())
+        _rows = _data["per_view"]
+        if tuple(r["view"] for r in _rows) != dtu.TEST_IDS:
+            raise ValueError("The record must contain the 25 test views in protocol order.")
+        _off = np.array([r["off_db"] for r in _rows])
+        _on = np.array([r["on_db"] for r in _rows])
+        _delta = _on - _off
+        _better = int((_delta > 0).sum())
+        _mean = float(_delta.mean())
+        _effect = (f"**raised** the mean foreground PSNR by **{_mean:.2f} dB**" if _mean > 0 else
+                   f"**lowered** the mean foreground PSNR by **{-_mean:.2f} dB**" if _mean < 0 else
+                   "**did not change** the mean foreground PSNR")
+        _record = _data["record"]
+        _body = mo.vstack(
+            [
+                mo.hstack(
+                    [
+                        stat(f"{_off.mean():.2f} dB", "Smoothing off", "mean of 25 test views"),
+                        stat(f"{_on.mean():.2f} dB", "Smoothing on", "mean of 25 test views"),
+                        stat(f"{_mean:+.2f} dB", "On minus off", f"better in {_better} of 25 views"),
+                    ],
+                    widths="equal",
+                    gap=1,
+                ),
+                result(
+                    f"On this scan, depth smoothing {_effect}. It was better in **{_better} of 25** test views; the "
+                    f"change per view ranges from {_delta.min():+.2f} to {_delta.max():+.2f} dB.\n\n"
+                    "**Limits.** One scan and one seed. PSNR measures colour, not shape. Notebook 1 "
+                    "showed that colour PSNR can vary a lot between seeds.",
+                    kind="success" if _mean > 0 else "warn",
+                ),
+                mo.accordion(
+                    {
+                        "Every test view": mo.ui.table(
+                            [{"View": r["view"], "Off (dB)": round(r["off_db"], 2), "On (dB)": round(r["on_db"], 2),
+                              "On minus off (dB)": round(r["on_minus_off_db"], 2)} for r in _rows],
+                            selection=None,
+                            show_column_summaries=False,
+                        ),
+                        "Evaluation record": mo.md("```json\n" + json.dumps(_record, indent=2) + "\n```"),
+                    }
+                ),
+            ]
+        )
+    else:
+        _body = missing("The evaluation is", _command)
+    mo.vstack(
+        [
+            mo.md(
+                """
+                ---
+                ## 4. The score over 25 new cameras
+                For each test photo, the score uses only the object's pixels (its mask), computes the
+                colour error, and turns it into PSNR. The result is the mean of the 25 PSNR values.
+                Higher is better. This is not the PSNR printed during training.
+                """
+            ),
+            _body,
+        ]
+    )
     return
 
 
 @app.cell
 def _(mo):
-    mo.md("""
-    ## Control the comparison
-    For a new verified pair, use views 25, 22, and 28; seed 42; Adam;
-    44000 steps; and identical ray samples, bounds schedule, and resolution.
-    Change only the depth weight. Use a separate random generator for depth
-    samples. Skip depth patches when the depth weight is zero.
-    In the on condition, the scheduled weight decreases from 400 to 0.1
-    by step 512. In the off condition, the weight stays zero.
+    mo.vstack(
+        [
+            mo.md("---\n## Summary"),
+            mo.md(
+                """
+                **Questions for discussion**
+                - Does the evidence support better colour prediction on this scan? How large is the
+                  change compared with the variation between seeds in notebook 1?
+                - The paper reports +4.55 dB for geometry regularization. Why might one scan, with
+                  this code and without the appearance loss, show a different size of effect?
+                - What evidence would you need to claim that the *shape* improved?
 
-    Compare saved models at the same step. Use scale 2 for both evaluations.
-    For each view, compute RGB MSE on foreground pixels, then compute
-    `PSNR = -10 * log10(MSE)`. Take the arithmetic mean of the 25 PSNR values.
-    Report `on mean - off mean`, including a tie or a decrease.
+                **Next.** Smoothing helps inside a surface, but a real depth edge should stay sharp.
+                Notebook 3 tests a penalty that relaxes at image edges.
+                """
+            ),
+            mo.accordion(
+                {
+                    "How the two models were trained": mo.md(
+                        """
+                        - **Same for both:** training views 25, 22, and 28; seed 42; 20,000 steps; Adam with
+                          the same learning-rate schedule; training scale 4; the same ray sampling, coarse
+                          jitter, and sample-space annealing. Depth patches use a separate random generator.
+                        - **The only difference:** the depth weight. With smoothing on, the fine depth
+                          weight falls from 400 to 0.1 by step 512, and the coarse depth weight is 0.1.
+                          With smoothing off, both are 0 and no depth patches are rendered.
+                        - **Scoring:** both models at the same step, at evaluation scale 2, on the 25 test
+                          views from `dtu.py`.
+                        - **Neither model** has RegNeRF's appearance loss.
+                        - **Record:** `compare_depth.py` writes the code revision, settings, and checkpoint
+                          paths to `protocol.json` before training. `evaluate_pair.py` checks the pair
+                          against it and stores it in the evaluation record above.
+                        """
+                    ),
+                    "Prepare the results (before the lab)": mo.md(
+                        """
+                        Run from the project root. Training takes about 1 to 1.5 hours on a laptop GPU.
+                        Students need only the first command; the results are saved in Git.
 
-    **Preparation limit:** `compare_depth.py` currently uses scale 4 for its
-    automatic evaluation. Use `eval_dtu.py --scale 2` for both saved models
-    to follow the review protocol. Do not mix scores from different scales.
-
-    **Discuss:** Does the evidence support better colour prediction on this scan?
-    What reference-depth evidence is still needed? Which controls lack a
-    training record for the existing pair?
-
-    **Connection:** A smooth surface is useful inside an object. A true depth
-    boundary needs a different treatment. Test that limit in Notebook 3.
-    """)
+                        ```sh
+                        uv run python prepare_dtu.py --download
+                        uv run python compare_depth.py --output-dir checkpoint/scan40_pair_new --run
+                        uv run python -m notebooks.evaluate_pair
+                        uv run python -m notebooks.render_scan40_views
+                        ```
+                        """
+                    ),
+                }
+            ),
+        ]
+    )
     return
 
 
