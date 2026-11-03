@@ -47,7 +47,7 @@ def main():
                     density_noise_std=1.0 if args.density_noise_std is None else args.density_noise_std,
                     fine_weights={"on": depth_on_weight, "off": 0.0},
                     initial_fine_weights={"on": args.depth_weight_start, "off": 0.0},
-                    coarse_depth_weights={"on": 0.1, "off": 0.0},
+                    coarse_depth_weights={"on": 0.1, "off": 0.0}, stratified=True,
                     config={k: getattr(training, k) for k in ("BATCH_SIZE", "DEPTH_RAYS", "PATCH_SIZE",
                             "LR_INIT", "LR_FINAL", "LR_DELAY_STEPS", "LR_DELAY_MULT", "BOUND_STEPS",
                             "INITIAL_RANGE_FRACTION", "DEPTH_DECAY_STEPS")},
@@ -62,7 +62,8 @@ def main():
     for name, weight in conditions:
         folder = args.output_dir / name
         train(3, scene, folder, depth_weight=weight, background=args.background,
-              density_noise_std=args.density_noise_std, depth_weight_start=args.depth_weight_start, seed=SEED)
+              density_noise_std=args.density_noise_std, depth_weight_start=args.depth_weight_start, seed=SEED,
+              stratified=True)
         scores[name] = evaluate(folder / "mipnerf_final.pt", scene, EVAL_SCALE, 512,
                                 "cuda" if torch.cuda.is_available() else "cpu")
     print(f"Off {scores['off']:.3f} dB | on {scores['on']:.3f} dB | "

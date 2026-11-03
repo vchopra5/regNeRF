@@ -101,7 +101,7 @@ def training_matmul_precision():
 def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), depth_weight=DEPTH_WEIGHT,
           stop_after=None, after_step=None, background=None, density_noise_std=None,
           regnerf_density=None, use_all_synthetic_poses=False, depth_weight_start=DEPTH_WEIGHT_START,
-          virtual_canny=False, scale=None, seed=None):
+          virtual_canny=False, scale=None, seed=None, stratified=True):
     if not math.isfinite(depth_weight_start) or depth_weight_start < 0:
         raise ValueError("The starting depth weight must be finite and nonnegative.")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -176,9 +176,10 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     if density_noise_std is None:
         density_noise_std = 1.0 if regnerf_density else 0.0
     near, far = dtu.BOUNDS if is_dtu else (2.0, 6.0)
-    model = MipNeRF(near=near, far=far, background=background,
-                    density_noise_std=density_noise_std, regnerf_density=regnerf_density).to(device)
-    print(f"Background: {background} | Training density noise std: {density_noise_std:g}")
+    model = MipNeRF(near=near, far=far, background=background, density_noise_std=density_noise_std,
+                    regnerf_density=regnerf_density, stratified=stratified).to(device)
+    print(f"Background: {background} | Training density noise std: {density_noise_std:g}"
+          f" | Coarse jitter: {model.stratified}")
     full_near, full_far = model.near, model.far
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -325,6 +326,9 @@ if __name__ == "__main__":
     parser.add_argument("--data-dir", default=DATA_DIR)
     parser.add_argument("--virtual-canny", action="store_true",
                         help="Skip depth comparisons at Canny edges in rendered unseen-camera patches.")
+    parser.add_argument("--stratified", action=argparse.BooleanOptionalAction, default=True,
+                        help="Jitter the coarse intervals during training (default: on). "
+                             "Use --no-stratified to match runs from before 2026-11-03.")
     parser.add_argument("--num-views", type=int, default=9)
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("checkpoint"))
     parser.add_argument("--depth-weight", type=float, default=DEPTH_WEIGHT,

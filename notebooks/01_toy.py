@@ -494,6 +494,8 @@ def _(TOY_SEED, camera_view, json, scene):
             _folder = experiment_scene / (_name if _steps == 300 else f"{_name}_{_steps}")
             _record = json.loads((_folder / "result.json").read_text())
             _record.setdefault("seed", TOY_SEED)
+            # The saved runs trained before coarse jitter existed.
+            _record.setdefault("stratified", False)
             saved.append((_folder, _record))
 
     def score_row(result, source):
@@ -501,6 +503,7 @@ def _(TOY_SEED, camera_view, json, scene):
             "Source": source,
             "Steps": result["steps"],
             "Seed": result["seed"],
+            "Coarse jitter": "on" if result.get("stratified", False) else "off",
             "Fine weight": result["fine_weight"],
             "Colour PSNR (dB)": round(result["foreground_psnr"], 2),
             "Depth MAE": round(result["depth_mae"], 3),
@@ -621,6 +624,8 @@ def _(
     from notebooks.toy_experiment import run_condition
 
     _cache = scene.parents[2] / "checkpoint" / "toy_two_spheres_student_v3"
+    # New runs use coarse jitter. A run is paired only with runs that have the same setting.
+    _jitter = True
     _history = list(saved)
     for _base_file in sorted(_cache.glob("*/result.json")):
         _file = _base_file.parent / "lower" / "result.json" if camera_view.value == "Lower view" else _base_file
@@ -638,6 +643,7 @@ def _(
         return (
             result["steps"] == steps
             and result.get("seed") == TOY_SEED
+            and result.get("stratified", False) == _jitter
             and np.isclose(result["fine_weight"], weight, rtol=0, atol=1e-8)
         )
 
@@ -665,7 +671,7 @@ def _(
                 _cache.mkdir(parents=True, exist_ok=True)
                 _folder = Path(mkdtemp(prefix="run_", dir=_cache))
                 with mo.status.spinner(title=f"Training {_steps} steps with fine weight {_w:g}"):
-                    run_condition(_folder, _steps, _w)
+                    run_condition(_folder, _steps, _w, stratified=_jitter)
                 _folder = _folder / "lower" if camera_view.value == "Lower view" else _folder
                 _history.append((_folder, json.loads((_folder / "result.json").read_text())))
                 _sources.append("trained now")
@@ -710,7 +716,9 @@ def _(
                           off both depth terms.
                         - Every run uses seed 42 for model initialization and RGB ray sampling. Depth patches
                           use a separate generator with seed 43. All other training settings stay fixed.
-                          A saved result is reused only at the same seed, weight, and step count.
+                          A saved result is reused only at the same seed, weight, step count, and
+                          coarse jitter setting. New runs use coarse jitter. The saved runs in section 6
+                          do not, so a new comparison trains its own smoothing-off model.
                         - PSNR and depth MAE use the true foreground at evaluation scale 2, for the selected
                           held-out camera. They are not training-batch scores or paper benchmark scores.
                           Differences use unrounded values.

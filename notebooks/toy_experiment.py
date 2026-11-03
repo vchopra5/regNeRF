@@ -70,7 +70,7 @@ def prepare_scene(output=ASSETS, extra_angles=()):
     np.savez_compressed(output / "reference.npz", depth=depth[::2, ::2].astype("float32"), ids=ids[::2, ::2])
 
 
-def run_condition(folder, steps, weight, training_scene=ASSETS):
+def run_condition(folder, steps, weight, training_scene=ASSETS, stratified=True):
     import torch
     import train as training
     from provenance import file_hashes, git
@@ -80,12 +80,13 @@ def run_condition(folder, steps, weight, training_scene=ASSETS):
     sources = ("train.py", "model.py", "data.py", "two_spheres.py", "notebooks/toy_experiment.py", "provenance.py")
     provenance = dict(code_revision=git("rev-parse", "HEAD"), local_changes=git("diff", "HEAD", "--", *sources),
                       code_sha256=file_hashes(sources),
-                      seed=TOY_SEED, evaluation_scale=2, heldout_camera=dict(angle=15, elevation=5),
+                      seed=TOY_SEED, stratified=stratified, evaluation_scale=2,
+                      heldout_camera=dict(angle=15, elevation=5),
                       coarse_weight=0.1 if weight else 0.0, views=views,
                       training_transforms=json.loads((training_scene / "transforms_train.json").read_text()),
                       checkpoint=str((folder / "mipnerf_final.pt").resolve()))
     training.train(views, training_scene, folder, depth_weight=weight, depth_weight_start=weight,
-          stop_after=steps, scale=2, regnerf_density=True, seed=TOY_SEED)
+          stop_after=steps, scale=2, regnerf_density=True, seed=TOY_SEED, stratified=stratified)
     train_seconds = perf_counter() - start
     result = dict(steps=steps, fine_weight=weight, training_seconds=train_seconds,
                   device="cuda" if torch.cuda.is_available() else "cpu", **provenance)
