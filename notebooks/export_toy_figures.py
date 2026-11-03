@@ -7,18 +7,18 @@ from PIL import Image, ImageDraw
 
 from notebooks.lab import solve_depth
 from notebooks.toy_experiment import ASSETS, ensure_assets
-from notebooks.toy_figures import (comparison, curve_fit_figure, depth_profile, font,
+from notebooks.toy_figures import (comparison, crisp, curve_fit_figure, depth_profile, font,
                                   patch_experiment, shear_patch, surface_inspector)
 
 
-def stack(panels, width=800):
+def stack(panels, width=1200):
     resized = []
     for title, picture in panels:
         picture = picture.convert('RGB')
         picture = picture.resize((width, round(picture.height * width / picture.width)), Image.Resampling.LANCZOS)
-        panel = Image.new('RGB', (width, picture.height + 38), 'white')
-        ImageDraw.Draw(panel).text((12, 9), title, fill='#203743', font=font(20))
-        panel.paste(picture, (0, 38))
+        panel = Image.new('RGB', (width, picture.height + 52), 'white')
+        ImageDraw.Draw(panel).text((16, 12), title, fill='#203743', font=font(28))
+        panel.paste(picture, (0, 52))
         resized.append(panel)
     board = Image.new('RGB', (width, sum(p.height for p in resized)), 'white')
     top = 0
@@ -43,14 +43,15 @@ def main():
     for count in (3, 9, 20):
         folder = ASSETS / 'coverage_500' / str(count)
         score = json.loads((folder / 'result.json').read_text())
-        inputs = Image.open(folder / 'inputs.png')
-        inputs.thumbnail((640,340))
-        panel = Image.new('RGB', (650, 260 + inputs.height), 'white')
-        panel.paste(Image.open(ASSETS / 'reference.png').resize((300,225)), (0,0))
-        panel.paste(Image.open(folder / 'heldout.png').resize((300,225)), (340,0))
-        ImageDraw.Draw(panel).text((12,230), 'Reference', fill='black', font=font(15))
-        ImageDraw.Draw(panel).text((350,230), f'{count} photos: {score["foreground_psnr"]:.2f} dB', fill='black', font=font(15))
-        panel.paste(inputs,(5,260))
+        inputs = Image.open(folder / 'inputs.png').convert('RGB')
+        inputs = inputs.resize((1200, round(inputs.height * 1200 / inputs.width)), Image.Resampling.LANCZOS)
+        panel = Image.new('RGB', (1200, 520 + inputs.height), 'white')
+        panel.paste(crisp(ASSETS / 'reference.png', 300), (0, 0))
+        panel.paste(crisp(folder / 'heldout.png', 300), (620, 0))
+        ImageDraw.Draw(panel).text((16, 456), 'Reference', fill='#203743', font=font(28))
+        ImageDraw.Draw(panel).text((636, 456), f'{count} photos: {score["foreground_psnr"]:.2f} dB',
+                                   fill='#203743', font=font(28))
+        panel.paste(inputs, (0, 520))
         coverage.append((f'{count} photos; 500 steps; smoothing off', panel))
     stack(coverage).save(out / 'coverage_500.png')
     stack([(f'Camera shift {s:+.1f}', shear_patch(rgb, truth, baseline, focal, s)) for s in (0,.8)]).save(out / 'camera_shift.png')
