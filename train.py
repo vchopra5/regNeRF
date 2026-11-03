@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 
 from data import get_rays, load_data, pixel_rays
-from model import MipNeRF
+from model import MipNeRF, render_rays
 import numpy as np
 import dtu
 
@@ -101,11 +101,7 @@ def training_matmul_precision():
 def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), depth_weight=DEPTH_WEIGHT,
           stop_after=None, after_step=None, background=None, density_noise_std=None,
           regnerf_density=None, use_all_synthetic_poses=False, depth_weight_start=DEPTH_WEIGHT_START,
-          edge_strength=0.0, training_edge_masks=None, virtual_canny=False, scale=None, seed=None):
-    if virtual_canny and (edge_strength or training_edge_masks is not None):
-        raise ValueError("Use one edge mask method at a time.")
-    if not math.isfinite(edge_strength) or edge_strength < 0:
-        raise ValueError("Edge strength must be finite and nonnegative.")
+          virtual_canny=False, scale=None, seed=None):
     if not math.isfinite(depth_weight_start) or depth_weight_start < 0:
         raise ValueError("The starting depth weight must be finite and nonnegative.")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -120,7 +116,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     print("Using device:", device)
 
     # 1. Load the dataset
-    images, poses, focal = load_data(
+    images, poses, intrinsics = load_data(
         data_dir, split="train", scale=SCALE if scale is None else scale
     )
 
@@ -137,17 +133,12 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     # Training cameras are fixed. Cache only the selected views.
     rgb_views = {}
     for index in train_indices:
-        intrinsics = focal[index] if is_dtu else focal
-        fields = get_rays(H, W, intrinsics, poses[index])
+        fields = get_rays(H, W, intrinsics[index], poses[index])
         rgb_views[index] = (images[index].reshape(-1, 3).to(device),
                             tuple(field.reshape(-1, field.shape[-1]) for field in fields))
     if depth_weight != 0:
         depth_rng = torch.Generator(device=device).manual_seed(seed + 1)
-    if training_edge_masks is not None:
-        if edge_strength or is_dtu or training_edge_masks.shape != images.shape[:3]:
-            raise ValueError("Training edge masks need matching synthetic views and edge_strength=0.")
-        training_edge_masks = training_edge_masks.to(device=device, dtype=torch.bool)
-    if depth_weight != 0 and training_edge_masks is None:
+    if depth_weight != 0:
         # In case of RegNeRF, calculate camera position to add for depth loss
         sampling_poses = dtu.load_rig_poses(Path(data_dir)).to(device) if is_dtu else poses[train_indices]
         if use_all_synthetic_poses and not is_dtu:
@@ -175,7 +166,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
         focus = torch.linalg.lstsq(A, b).solution
 
     print("Images:", images.shape)
-    print("Focal:", focal)
+    print("Intrinsics:", intrinsics[train_indices[0]])
 
     # 2. Initialize model and optimizer
     if background is None:
@@ -209,7 +200,6 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
         # Choose a random training image
         image_idx = int(rng.choice(train_indices))
 
-        ray_intrinsics = focal[image_idx] if is_dtu else focal
         targets, fields = rgb_views[image_idx]
         indices = torch.randint(H * W, (BATCH_SIZE,)).to(device, non_blocking=True)
         batch_rgb = targets[indices]
@@ -234,37 +224,24 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
             # Sample one virtual camera and one contiguous pixel patch per patch index.
             patch_area = PATCH_SIZE ** 2
             patch_count = DEPTH_RAYS // patch_area
-            if training_edge_masks is None:
-                patch_poses = sample_virtual_poses(patch_count, box_min, box_max, focus, up_ref, depth_rng)
-            else:
-                patch_poses = poses[image_idx].expand(patch_count, -1, -1)
+            patch_poses = sample_virtual_poses(patch_count, box_min, box_max, focus, up_ref, depth_rng)
 
             offsets = torch.arange(patch_area, device=device)
             x = torch.randint(W - PATCH_SIZE + 1, (patch_count, 1), device=device, generator=depth_rng) + offsets % PATCH_SIZE
             y = torch.randint(H - PATCH_SIZE + 1, (patch_count, 1), device=device, generator=depth_rng) + offsets // PATCH_SIZE
-            patch_rays = pixel_rays(H, W, ray_intrinsics, patch_poses, x, y)
+            # Virtual cameras use the intrinsics of the current training view.
+            patch_rays = pixel_rays(H, W, intrinsics[image_idx], patch_poses, x, y)
             clear_patches = None
             if virtual_canny:
                 clear_patches = virtual_patch_clear_mask(
-                    model, H, W, ray_intrinsics, patch_poses, x[:, :1], y[:, :1])
-            elif training_edge_masks is not None:
-                clear_patches = ~training_edge_masks[image_idx, y, x].reshape(-1, PATCH_SIZE, PATCH_SIZE)
+                    model, H, W, intrinsics[image_idx], patch_poses, x[:, :1], y[:, :1])
 
             patches_per_chunk = RAYS_PER_CHUNK // patch_area
             for start in range(0, patch_count, patches_per_chunk):
                 chunk = slice(start, start + patches_per_chunk)
                 rays = [ray[chunk].flatten(0, 1) for ray in patch_rays]
-                levels = model(*rays, return_depth_levels=True, generator=depth_rng,
-                               return_patch_rgb=edge_strength > 0)
-                edge_weights = None
-                if clear_patches is not None:
-                    edge_weights = clear_neighbor_pairs(clear_patches[chunk])
-                if edge_strength > 0:
-                    levels, rgb = levels
-                    rgb = rgb.reshape(-1, PATCH_SIZE, PATCH_SIZE, 3)
-                    anchor = rgb[:, :-1, :-1]
-                    edge_weights = tuple(torch.exp(-edge_strength * (anchor - neighbor).abs().mean(-1))
-                                         for neighbor in (rgb[:, :-1, 1:], rgb[:, 1:, :-1]))
+                levels = model(*rays, return_depth_levels=True, generator=depth_rng)
+                edge_weights = None if clear_patches is None else clear_neighbor_pairs(clear_patches[chunk])
                 chunk_fraction = rays[0].shape[0] / DEPTH_RAYS
                 depth_loss = loss.new_zeros(())
                 for (depth, opacity), weight in zip(levels, (0.1, current_weight)):
@@ -318,11 +295,10 @@ def virtual_patch_clear_mask(model, height, width, intrinsics, poses, x0, y0):
     x = (x0 + offsets % side - halo).clamp(0, width - 1)
     y = (y0 + offsets // side - halo).clamp(0, height - 1)
     rays = pixel_rays(height, width, intrinsics, poses, x, y)
-    batches = [ray.flatten(0, 1).split(RAYS_PER_CHUNK) for ray in rays]
     training = model.training
     model.eval()
     try:
-        rgb = torch.cat([model(*batch)[1] for batch in zip(*batches)])
+        rgb = render_rays(model, [ray.flatten(0, 1) for ray in rays], RAYS_PER_CHUNK)
     finally:
         model.train(training)
     images = (rgb.reshape(-1, side, side, 3).clamp(0, 1) * 255).round().byte().cpu().numpy()
@@ -349,8 +325,6 @@ if __name__ == "__main__":
     parser.add_argument("--data-dir", default=DATA_DIR)
     parser.add_argument("--virtual-canny", action="store_true",
                         help="Skip depth comparisons at Canny edges in rendered unseen-camera patches.")
-    parser.add_argument("--edge-strength", type=float, default=0.,
-                        help="Reduce depth smoothing at predicted RGB edges. Zero uses uniform smoothing.")
     parser.add_argument("--num-views", type=int, default=9)
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("checkpoint"))
     parser.add_argument("--depth-weight", type=float, default=DEPTH_WEIGHT,

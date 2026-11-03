@@ -11,7 +11,7 @@ import dtu
 from PIL import Image
 
 from data import get_rays
-from model import MipNeRF
+from model import load_model, render_rays
 
 
 def positive_int(value):
@@ -68,26 +68,9 @@ def load_camera(data_dir, split, image_index, scale):
 
 @torch.inference_mode()
 def render_image(model, height, width, focal, pose, batch_size, device):
-    model.eval()
-    # Keep the full ray arrays on the CPU. Transfer only the current batch.
-    rays_o, rays_d, radii = get_rays(height, width, focal, pose.cpu())
-    rays_o = rays_o.reshape(-1, 3)
-    rays_d = rays_d.reshape(-1, 3)
-    radii = radii.reshape(-1, 1)
-    pixels = torch.empty((height * width, 3), dtype=torch.float32)
-    num_batches = (len(pixels) + batch_size - 1) // batch_size
-
-    for batch_index, start in enumerate(range(0, len(pixels), batch_size), 1):
-        end = min(start + batch_size, len(pixels))
-        _, fine_rgb = model(
-            rays_o[start:end].to(device),
-            rays_d[start:end].to(device),
-            radii[start:end].to(device),
-        )
-        pixels[start:end] = fine_rgb.cpu()
-        if batch_index % 100 == 0 or batch_index == num_batches:
-            print(f"Rendered {end}/{len(pixels)} pixels", flush=True)
-
+    # Keep the full ray arrays on the CPU. render_rays transfers one batch at a time.
+    rays = [ray.reshape(height * width, -1) for ray in get_rays(height, width, focal, pose.cpu())]
+    pixels = render_rays(model.eval(), rays, batch_size, device).cpu()
     if not torch.isfinite(pixels).all():
         raise ValueError("The model produced non-finite pixel values.")
     return (pixels.reshape(height, width, 3).clamp(0, 1)
@@ -101,13 +84,8 @@ def main():
         device_name = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device_name)
 
-    # train.py saves either a state dictionary or a training checkpoint.
-    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
-    state_dict = checkpoint["model"] if "model" in checkpoint else checkpoint
-    model = (MipNeRF(near=dtu.BOUNDS[0], far=dtu.BOUNDS[1])
-             if (args.data_dir / "cameras.npz").is_file() else MipNeRF())
-    model.load_state_dict(state_dict)
-    model.to(device)
+    bounds = dtu.BOUNDS if (args.data_dir / "cameras.npz").is_file() else (2.0, 6.0)
+    model = load_model(args.checkpoint, device, near=bounds[0], far=bounds[1])
 
     height, width, focal, pose = load_camera(
         args.data_dir, args.split, args.image_index, args.scale

@@ -54,7 +54,7 @@ def ensure_assets():
 def prepare_scene(output=ASSETS, extra_angles=()):
     """Build the sparse inputs, any extra camera views, and the held-out reference."""
     from generate_sphere import orbit_rotation
-    from two_spheres_canny import FOCAL, W, scene
+    from two_spheres import FOCAL, W, scene
 
     output.mkdir(parents=True, exist_ok=True)
     frames = []
@@ -71,26 +71,15 @@ def prepare_scene(output=ASSETS, extra_angles=()):
 
 
 def run_condition(folder, steps, weight, training_scene=ASSETS):
-    import hashlib
-    import subprocess
     import torch
     import train as training
+    from provenance import file_hashes, git
 
     start = perf_counter()
     views = len(json.loads((training_scene / "transforms_train.json").read_text())["frames"])
-    root = Path(__file__).resolve().parents[1]
-    try:
-        revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True)
-        changes = subprocess.run(["git", "diff", "HEAD", "--", "train.py", "model.py", "data.py",
-                                  "two_spheres_canny.py", "notebooks/toy_experiment.py"],
-                                 cwd=root, capture_output=True, text=True)
-        code_revision = revision.stdout.strip() if revision.returncode == 0 else "unknown"
-        local_changes = changes.stdout if changes.returncode == 0 else "unknown (no Git checkout)"
-    except FileNotFoundError:
-        code_revision, local_changes = "unknown", "unknown (Git is not installed)"
-    provenance = dict(code_revision=code_revision, local_changes=local_changes,
-                      code_sha256={name: hashlib.sha256((root/name).read_bytes()).hexdigest()
-                                   for name in ("train.py", "model.py", "data.py", "two_spheres_canny.py", "notebooks/toy_experiment.py")},
+    sources = ("train.py", "model.py", "data.py", "two_spheres.py", "notebooks/toy_experiment.py")
+    provenance = dict(code_revision=git("rev-parse", "HEAD"), local_changes=git("diff", "HEAD", "--", *sources),
+                      code_sha256=file_hashes(sources),
                       seed=TOY_SEED, evaluation_scale=2, heldout_camera=dict(angle=15, elevation=5),
                       coarse_weight=0.1 if weight else 0.0, views=views,
                       training_transforms=json.loads((training_scene / "transforms_train.json").read_text()),
@@ -112,8 +101,8 @@ def render_condition_view(checkpoint, folder, camera, training_result):
     """Render a fixed camera from a checkpoint. Do not train or select settings."""
     import torch
     from generate_sphere import orbit_rotation
-    from model import MipNeRF
-    from two_spheres_canny import scene
+    from model import load_model, render_rays
+    from two_spheres import scene
 
     start = perf_counter()
     folder = Path(folder)
@@ -122,12 +111,10 @@ def render_condition_view(checkpoint, folder, camera, training_result):
     target, truth, ids = target[::2, ::2], truth[::2, ::2].astype("float32"), ids[::2, ::2]
     hit = ids > 0
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = MipNeRF().to(device).eval()
-    model.load_state_dict(torch.load(checkpoint, map_location=device, weights_only=True))
-    fields = [r[::2, ::2].reshape(-1, r.shape[-1]).to(device).split(512) for r in rays]
+    model = load_model(checkpoint, device)
+    fields = [r[::2, ::2].reshape(-1, r.shape[-1]) for r in rays]
     with torch.inference_mode():
-        batches = [model(*r, return_depth=True)[1:] for r in zip(*fields)]
-    rgb, depth = (torch.cat(items).cpu().numpy() for items in zip(*batches))
+        rgb, depth = (part.cpu().numpy() for part in render_rays(model, fields, 512, device, return_depth=True))
     depth = depth.reshape(hit.shape)
     mae = float(np.abs(depth[hit] - truth[hit]).mean())
     rgb = rgb.reshape(*hit.shape, 3)

@@ -10,16 +10,16 @@ import torch
 
 from data import get_rays, load_data
 from generate_sphere import generate, scan40_rotations
-from model import MipNeRF
+from model import load_model, render_rays
 from train import NUM_STEPS, SCALE, SEED, add_depth_start_option, train
 
 
 def prepare_views(split, indices, scene="toy_sphere"):
-    images, poses, focal = load_data(scene, split, scale=SCALE)
+    images, poses, intrinsics = load_data(scene, split, scale=SCALE)
     h, w = images.shape[1:3]
     views = []
     for i in indices:
-        rays = get_rays(h, w, focal, poses[i])
+        rays = get_rays(h, w, intrinsics[i], poses[i])
         views.append(([r.reshape(-1, r.shape[-1]) for r in rays], images[i].reshape(-1, 3)))
     return views
 
@@ -40,9 +40,7 @@ def score(model, views, *, sphere_foreground=False):
                 hit = ((origins * directions).sum(-1).square() >=
                        directions.square().sum(-1) * (origins.square().sum(-1) - 1))
                 rays, target = [field[hit] for field in rays], target[hit]
-            predictions = [model(*(r.to(device) for r in batch))[1].cpu()
-                           for batch in zip(*(r.split(512) for r in rays))]
-            mse = (torch.cat(predictions) - target).square().mean()
+            mse = (render_rays(model, rays, 512, device).cpu() - target).square().mean()
             scores.append(float(-10 * mse.log10()))
         return float(np.mean(scores))
     finally:
@@ -113,10 +111,9 @@ def main():
         print(f"Stopped before step {test_step}. Validation results: {output}")
         return
     test = prepare_views("test", range(len(rotations["test"]) if args.dtu_views else 4), scene)
-    model = MipNeRF().to("cuda" if torch.cuda.is_available() else "cpu")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     for name in ("off", "on"):
-        model.load_state_dict(torch.load(output / name / f"demo_{test_step}.pt", weights_only=True,
-                                         map_location="cpu"))
+        model = load_model(output / name / f"demo_{test_step}.pt", device)
         print(f"Depth {name} at step {test_step} | test {score(model, test):.3f} dB")
         if args.dtu_views:
             print(f"Mean foreground PSNR (25 test views): {score(model, test, sphere_foreground=True):.3f} dB")
