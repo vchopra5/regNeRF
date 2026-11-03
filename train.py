@@ -1,17 +1,16 @@
-
 import argparse
 import json
 import math
 from contextlib import contextmanager
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
+import dtu
 from data import get_rays, load_data, pixel_rays
 from model import MipNeRF, render_rays
-import numpy as np
-import dtu
 
 # Settings
 DATA_DIR = "nerf_synthetic/chair"
@@ -98,10 +97,23 @@ def training_matmul_precision():
 
 
 @training_matmul_precision()
-def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), depth_weight=DEPTH_WEIGHT,
-          stop_after=None, after_step=None, background=None, density_noise_std=None,
-          regnerf_density=None, use_all_synthetic_poses=False, depth_weight_start=DEPTH_WEIGHT_START,
-          virtual_canny=False, scale=None, seed=None, stratified=True):
+def train(
+    num_views=3,
+    data_dir=DATA_DIR,
+    checkpoint_dir=Path("checkpoint"),
+    depth_weight=DEPTH_WEIGHT,
+    stop_after=None,
+    after_step=None,
+    background=None,
+    density_noise_std=None,
+    regnerf_density=None,
+    use_all_synthetic_poses=False,
+    depth_weight_start=DEPTH_WEIGHT_START,
+    virtual_canny=False,
+    scale=None,
+    seed=None,
+    stratified=True,
+):
     if not math.isfinite(depth_weight_start) or depth_weight_start < 0:
         raise ValueError("The starting depth weight must be finite and nonnegative.")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -109,10 +121,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
 
-
-    device = torch.device(
-        "cuda" if torch.cuda.is_available() else "cpu"
-    )
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
 
     # 1. Load the dataset
@@ -127,20 +136,28 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     # Sparse generation
 
     is_dtu = (Path(data_dir) / "cameras.npz").is_file()
-    train_indices = np.arange(num_views) if is_dtu else rng.choice(N, size=num_views, replace=False)
+    train_indices = (
+        np.arange(num_views) if is_dtu else rng.choice(N, size=num_views, replace=False)
+    )
 
     poses = poses.to(device)
     # Training cameras are fixed. Cache only the selected views.
     rgb_views = {}
     for index in train_indices:
         fields = get_rays(H, W, intrinsics[index], poses[index])
-        rgb_views[index] = (images[index].reshape(-1, 3).to(device),
-                            tuple(field.reshape(-1, field.shape[-1]) for field in fields))
+        rgb_views[index] = (
+            images[index].reshape(-1, 3).to(device),
+            tuple(field.reshape(-1, field.shape[-1]) for field in fields),
+        )
     if depth_weight != 0:
         depth_rng = torch.Generator(device=device).manual_seed(seed + 1)
     if depth_weight != 0:
         # In case of RegNeRF, calculate camera position to add for depth loss
-        sampling_poses = dtu.load_rig_poses(Path(data_dir)).to(device) if is_dtu else poses[train_indices]
+        sampling_poses = (
+            dtu.load_rig_poses(Path(data_dir)).to(device)
+            if is_dtu
+            else poses[train_indices]
+        )
         if use_all_synthetic_poses and not is_dtu:
             rig_poses = [poses]
             for split in ("val", "test"):
@@ -149,7 +166,9 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
                     with metadata.open() as source:
                         frames = json.load(source)["frames"]
                     if frames:
-                        rig_poses.append(poses.new_tensor([f["transform_matrix"] for f in frames]))
+                        rig_poses.append(
+                            poses.new_tensor([f["transform_matrix"] for f in frames])
+                        )
             sampling_poses = torch.cat(rig_poses)
         origins = sampling_poses[:, :3, 3]
         forward = -sampling_poses[:, :3, 2]
@@ -176,16 +195,22 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
     if density_noise_std is None:
         density_noise_std = 1.0 if regnerf_density else 0.0
     near, far = dtu.BOUNDS if is_dtu else (2.0, 6.0)
-    model = MipNeRF(near=near, far=far, background=background, density_noise_std=density_noise_std,
-                    regnerf_density=regnerf_density, stratified=stratified).to(device)
-    print(f"Background: {background} | Training density noise std: {density_noise_std:g}"
-          f" | Coarse jitter: {model.stratified}")
+    model = MipNeRF(
+        near=near,
+        far=far,
+        background=background,
+        density_noise_std=density_noise_std,
+        regnerf_density=regnerf_density,
+        stratified=stratified,
+    ).to(device)
+    print(
+        f"Background: {background} | Training density noise std: {density_noise_std:g}"
+        f" | Coarse jitter: {model.stratified}"
+    )
     full_near, full_far = model.near, model.far
     optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=learning_rate(0), fused=device.type == "cuda"
+        model.parameters(), lr=learning_rate(0), fused=device.type == "cuda"
     )
-
 
     model.train()
 
@@ -223,31 +248,56 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
         current_weight = scheduled_depth_weight(step, depth_weight, depth_weight_start)
         if depth_weight != 0:
             # Sample one virtual camera and one contiguous pixel patch per patch index.
-            patch_area = PATCH_SIZE ** 2
+            patch_area = PATCH_SIZE**2
             patch_count = DEPTH_RAYS // patch_area
-            patch_poses = sample_virtual_poses(patch_count, box_min, box_max, focus, up_ref, depth_rng)
+            patch_poses = sample_virtual_poses(
+                patch_count, box_min, box_max, focus, up_ref, depth_rng
+            )
 
             offsets = torch.arange(patch_area, device=device)
-            x = torch.randint(W - PATCH_SIZE + 1, (patch_count, 1), device=device, generator=depth_rng) + offsets % PATCH_SIZE
-            y = torch.randint(H - PATCH_SIZE + 1, (patch_count, 1), device=device, generator=depth_rng) + offsets // PATCH_SIZE
+            x = (
+                torch.randint(
+                    W - PATCH_SIZE + 1,
+                    (patch_count, 1),
+                    device=device,
+                    generator=depth_rng,
+                )
+                + offsets % PATCH_SIZE
+            )
+            y = (
+                torch.randint(
+                    H - PATCH_SIZE + 1,
+                    (patch_count, 1),
+                    device=device,
+                    generator=depth_rng,
+                )
+                + offsets // PATCH_SIZE
+            )
             # Virtual cameras use the intrinsics of the current training view.
             patch_rays = pixel_rays(H, W, intrinsics[image_idx], patch_poses, x, y)
             clear_patches = None
             if virtual_canny:
                 clear_patches = virtual_patch_clear_mask(
-                    model, H, W, intrinsics[image_idx], patch_poses, x[:, :1], y[:, :1])
+                    model, H, W, intrinsics[image_idx], patch_poses, x[:, :1], y[:, :1]
+                )
 
             patches_per_chunk = RAYS_PER_CHUNK // patch_area
             for start in range(0, patch_count, patches_per_chunk):
                 chunk = slice(start, start + patches_per_chunk)
                 rays = [ray[chunk].flatten(0, 1) for ray in patch_rays]
                 levels = model(*rays, return_depth_levels=True, generator=depth_rng)
-                edge_weights = None if clear_patches is None else clear_neighbor_pairs(clear_patches[chunk])
+                edge_weights = (
+                    None
+                    if clear_patches is None
+                    else clear_neighbor_pairs(clear_patches[chunk])
+                )
                 chunk_fraction = rays[0].shape[0] / DEPTH_RAYS
                 depth_loss = loss.new_zeros(())
                 for (depth, opacity), weight in zip(levels, (0.1, current_weight)):
                     depth = depth.reshape(-1, PATCH_SIZE, PATCH_SIZE)
-                    depth_loss += weight * depth_patch_loss(depth, opacity.reshape_as(depth), edge_weights)
+                    depth_loss += weight * depth_patch_loss(
+                        depth, opacity.reshape_as(depth), edge_weights
+                    )
                 depth_loss = depth_loss * chunk_fraction
                 depth_loss.backward()
                 loss += depth_loss.detach()
@@ -260,9 +310,7 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
 
         # 7. Print progress
         if step % PRINT_EVERY == 0:
-            psnr = -10.0 * torch.log10(
-                fine_mse.clamp_min(1e-10)
-            )
+            psnr = -10.0 * torch.log10(fine_mse.clamp_min(1e-10))
 
             print(
                 f"Step {step}/{NUM_STEPS} | "
@@ -273,11 +321,14 @@ def train(num_views=3, data_dir=DATA_DIR, checkpoint_dir=Path("checkpoint"), dep
 
         # 8. Save model checkpoints
         if step % SAVE_EVERY == 0:
-            torch.save({
-                "step": step,
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict()
-            }, checkpoint_dir / f"checkpoint_{step}.pt")
+            torch.save(
+                {
+                    "step": step,
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                },
+                checkpoint_dir / f"checkpoint_{step}.pt",
+            )
 
     # Save final model
     torch.save(model.state_dict(), checkpoint_dir / "mipnerf_final.pt")
@@ -302,36 +353,63 @@ def virtual_patch_clear_mask(model, height, width, intrinsics, poses, x0, y0):
         rgb = render_rays(model, [ray.flatten(0, 1) for ray in rays], RAYS_PER_CHUNK)
     finally:
         model.train(training)
-    images = (rgb.reshape(-1, side, side, 3).clamp(0, 1) * 255).round().byte().cpu().numpy()
+    images = (
+        (rgb.reshape(-1, side, side, 3).clamp(0, 1) * 255).round().byte().cpu().numpy()
+    )
     clear = np.stack([~canny(image)[halo:-halo, halo:-halo] for image in images])
     return torch.from_numpy(clear).to(poses.device)
 
 
 def add_depth_start_option(parser, default=DEPTH_WEIGHT_START):
-    parser.add_argument("--depth-weight-start", type=float, default=default,
-                        help="Initial fine depth loss weight for depth-on training (default: %(default)s).")
+    parser.add_argument(
+        "--depth-weight-start",
+        type=float,
+        default=default,
+        help="Initial fine depth loss weight for depth-on training (default: %(default)s).",
+    )
 
 
 def add_render_settings(parser):
     add_depth_start_option(parser)
-    parser.add_argument("--background", choices=("black", "white"),
-                        help="Background for unoccupied rays. DTU uses black. Other scenes use white.")
-    parser.add_argument("--density-noise-std", type=float,
-                        help="Training noise on raw density. DTU uses 1. Other scenes use 0.")
+    parser.add_argument(
+        "--background",
+        choices=("black", "white"),
+        help="Background for unoccupied rays. DTU uses black. Other scenes use white.",
+    )
+    parser.add_argument(
+        "--density-noise-std",
+        type=float,
+        help="Training noise on raw density. DTU uses 1. Other scenes use 0.",
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_render_settings(parser)
     parser.add_argument("--data-dir", default=DATA_DIR)
-    parser.add_argument("--virtual-canny", action="store_true",
-                        help="Skip depth comparisons at Canny edges in rendered unseen-camera patches.")
-    parser.add_argument("--stratified", action=argparse.BooleanOptionalAction, default=True,
-                        help="Jitter the coarse intervals during training (default: on). "
-                             "Use --no-stratified to match runs from before 2026-11-03.")
+    parser.add_argument(
+        "--virtual-canny",
+        action="store_true",
+        help="Skip depth comparisons at Canny edges in rendered unseen-camera patches.",
+    )
+    parser.add_argument(
+        "--stratified",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Jitter the coarse intervals during training (default: on). "
+        "Use --no-stratified to match runs from before 2026-11-03.",
+    )
     parser.add_argument("--num-views", type=int, default=9)
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("checkpoint"))
-    parser.add_argument("--depth-weight", type=float, default=DEPTH_WEIGHT,
-                        help="Final depth loss weight after decay. Zero disables the loss.")
-    parser.add_argument("--stop-after", type=int, help="Stop early and keep the original learning rate schedule.")
+    parser.add_argument(
+        "--depth-weight",
+        type=float,
+        default=DEPTH_WEIGHT,
+        help="Final depth loss weight after decay. Zero disables the loss.",
+    )
+    parser.add_argument(
+        "--stop-after",
+        type=int,
+        help="Stop early and keep the original learning rate schedule.",
+    )
     train(**vars(parser.parse_args()))

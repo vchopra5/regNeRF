@@ -1,8 +1,8 @@
-import torch
 import json
-import numpy as np
-
 from pathlib import Path
+
+import numpy as np
+import torch
 from PIL import Image
 
 
@@ -10,27 +10,26 @@ def get_rays(H, W, focal, pose):
     x, y = torch.meshgrid(
         torch.arange(W, dtype=pose.dtype, device=pose.device),
         torch.arange(H, dtype=pose.dtype, device=pose.device),
-        indexing="xy"
+        indexing="xy",
     )
 
     return pixel_rays(H, W, focal, pose, x, y)
 
 
 def pixel_rays(H, W, focal, pose, x, y):
-    fx, fy, cx, cy, skew = (focal if isinstance(focal, tuple)
-                             else (focal, focal, W / 2, H / 2, 0.0))
+    fx, fy, cx, cy, skew = (
+        focal if isinstance(focal, tuple) else (focal, focal, W / 2, H / 2, 0.0)
+    )
     y_cam = (y + 0.5 - cy) / fy
-    directions = torch.stack([
-        (x + 0.5 - cx - skew * y_cam) / fx,
-        -y_cam,
-        -torch.ones_like(x)
-    ], dim=-1)
+    directions = torch.stack(
+        [(x + 0.5 - cx - skew * y_cam) / fx, -y_cam, -torch.ones_like(x)], dim=-1
+    )
 
     rays_d = directions @ pose[..., :3, :3].transpose(-1, -2)
 
     rays_o = pose[..., :3, 3].unsqueeze(-2).expand_as(rays_d)
 
-    radii = torch.full_like(rays_d[..., :1], 2 / (fx*np.sqrt(12)))
+    radii = torch.full_like(rays_d[..., :1], 2 / (fx * np.sqrt(12)))
 
     return rays_o, rays_d, radii
 
@@ -40,6 +39,7 @@ def load_data(scene_dir, split="train", scale=1):
     scene_dir = Path(scene_dir)
     if (scene_dir / "cameras.npz").is_file():
         from dtu import load_views
+
         return load_views(scene_dir, split, scale)
 
     with open(scene_dir / f"transforms_{split}.json") as f:
@@ -56,10 +56,7 @@ def load_data(scene_dir, split="train", scale=1):
         with Image.open(path) as image:
             w, h = image.size
             image = image.convert("RGBA")
-            image = image.resize(
-                (w // scale, h // scale),
-                Image.Resampling.LANCZOS
-            )
+            image = image.resize((w // scale, h // scale), Image.Resampling.LANCZOS)
 
         images.append(np.asarray(image))
 
@@ -75,15 +72,12 @@ def load_data(scene_dir, split="train", scale=1):
 
     poses = np.asarray(poses, dtype=np.float32)
 
-    H, W = images.shape[1:3]
+    _H, W = images.shape[1:3]
 
-    focal = 0.5*W/np.tan(
-        0.5*meta["camera_angle_x"]
-    )
+    focal = 0.5 * W / np.tan(0.5 * meta["camera_angle_x"])
 
     return (
         torch.from_numpy(images),
         torch.from_numpy(poses),
-        [float(focal)] * len(frames)
+        [float(focal)] * len(frames),
     )
-
