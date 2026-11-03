@@ -24,3 +24,5 @@ __pycache__/
 /.lab_runtime/
 /notebooks/__marimo__/
 /notebooks/exports/
+
+*/assets/

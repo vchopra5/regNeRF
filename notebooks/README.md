@@ -4,17 +4,26 @@ Use the notebooks in order. Allow one hour for the team review.
 
 | File | Time | Task |
 | --- | --- | --- |
-| `01_toy.py` | 15 min | Isolate the smoothness penalty with known sphere depth. |
+| `01_toy.py` | 15 min, plus optional training | Inspect the sphere, move a depth patch, then compare models trained with and without the patch penalty. |
 | `02_paper.py` | 25 min | Inspect scan 40 and compare with RegNeRF Table 3. |
 | `03_extension.py` | 15 min | Change the penalty at colour edges. Measure boundary and flat-surface errors. |
 | Discussion | 5 min | State the result, its limit, and the next test. |
 
 Each notebook has a question, a prediction, evidence, and discussion prompts.
-The first and third notebooks solve small depth problems. They do not train a NeRF.
+The first notebook reads cached arrays for its pixel inspector. Select **Run comparison** to reuse a result or train one new model. New runs save their weights, RGB image, depth array and scores under `checkpoint/toy_two_spheres_student_v1`. The third notebook solves a small depth problem.
+
+**Open these figures if you cannot run Notebook 1.**
+
+1. Inspect the [depth across the centre of the sphere](toy_figures/centre_strip.png), then [fit the curve across its width](toy_figures/curve_fit.png).
+2. Compare the loss when you [move one pixel](toy_figures/one_pixel.png) and [move the whole patch](toy_figures/whole_patch.png) by 0.10 units.
+3. Compare the [held-out renders after 300 steps](toy_figures/training_300.png). Smoothing reduced mean surface depth error from 0.190 to 0.168 units in this view.
+
 The paper notebook reads saved images and an evaluation record. It shows a clear
-missing-result message until that record exists. No notebook starts training.
+missing-result message until that record exists. Opening a notebook does not start training.
 
 ## Open the notebooks
+
+The camera-motion slider redraws the stripe and camera diagram from cached depth arrays in under one second per change.
 
 Run commands from the project root. Use Python with PyTorch, NumPy, and Pillow.
 Install `marimo==0.25.2` in that environment if needed.

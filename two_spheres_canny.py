@@ -23,10 +23,10 @@ FOCAL = 0.5 * H / np.tan(np.deg2rad(18))
 SPHERES = [((0.55, -0.35, 0), 0.65), ((-0.7, 0.42, 0), 0.78)]
 
 
-def scene(rotation, distance=4):
+def scene(rotation, distance=4, *, sideways_shift=0.0):
     pose = torch.eye(4)
     pose[:3, :3] = torch.tensor(rotation)
-    pose[:3, 3] = distance * pose[:3, 2]
+    pose[:3, 3] = distance * pose[:3, 2] + sideways_shift * pose[:3, 0]
     rays = get_rays(H, W, FOCAL, pose)
     o, d = (r.numpy() for r in rays[:2])
     a = (d*d).sum(-1)

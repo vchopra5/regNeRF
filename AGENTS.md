@@ -1,6 +1,10 @@
 # Working instructions
 
-Use ASD-STE100 for written instructions. Run commands from the project root in a Python environment with PyTorch, NumPy, and Pillow. Use the local GPU when available.
+Use ASD-STE100 in replies, notebooks, and instructions. Speak to the reader as a colleague. Use short sentences, active verbs, and concrete terms. State the conclusion directly. Give the observation that supports it. Avoid filler and unnecessary qualifiers. Identify uncertainty only when it changes the conclusion.
+
+In a notebook, tell the student what to change, what to watch, and what the result shows. Put the conclusion beside the figure.
+
+Run commands from the project root in a Python environment with PyTorch, NumPy, and Pillow. Use the local GPU when available.
 
 ## Investigation
 
