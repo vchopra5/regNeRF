@@ -93,8 +93,8 @@ def main():
         evaluate(scene, output, args.steps)
         return
     output.mkdir(parents=True, exist_ok=False)
-    for source in ("train.py", "model.py", "compare_soft_edges.py"):
-        shutil.copy2(source, output / source)
+    for source in ("train.py", "model.py", "experiments/compare_soft_edges.py"):
+        shutil.copy2(source, output / Path(source).name)
     record = dict(scene=str(scene), seed=42, steps=args.steps, scale=1,
                   depth_weight=0.1, depth_weight_start=0.1, stratified=True,
                   train_view_ids=[25, 22, 28],

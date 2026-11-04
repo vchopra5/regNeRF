@@ -28,7 +28,7 @@ The loader needs **IDR-format DTU data**. The [IDR data convention](https://gith
 For a small download, use the [scan-40 community mirror](https://huggingface.co/datasets/turandai/gaussian-surfels-dtu/tree/main/scan40):
 
 ```sh
-python prepare_dtu.py --download
+python -m tools.prepare_dtu --download
 ```
 
 This command downloads only 49 images, 49 masks, and `cameras.npz`. It uses the fixed source revision `c70b6188f0eb1bac67843971e15ef97d213c6c09`. It excludes the large normal-map folder and all other scans. The required download is about 124 MB. It writes the files under `data/dtu/scan40`, then checks them. It does not start training. The download uses Hugging Face's [file-filtering API](https://huggingface.co/docs/huggingface_hub/guides/download#filter-files-to-download).
@@ -61,7 +61,7 @@ Keep the zero-based view IDs. Images use six digits; masks use three. Each camer
 If the files are already present, run only the check:
 
 ```sh
-python prepare_dtu.py
+python -m tools.prepare_dtu
 ```
 
 The check reads all 49 images and calibrations. It checks the 25 masks needed for evaluation, including their dimensions and nonempty foregrounds. It saves file hashes and the view lists in `data/dtu/scan40/validation.json`. A download also saves `download_source.json`. Keep these records with the experiment.
@@ -69,7 +69,7 @@ The check reads all 49 images and calibrations. It checks the 25 masks needed fo
 ## 3. Read the controlled protocol
 
 ```sh
-python compare_depth.py
+python -m experiments.compare_depth
 ```
 
 This command prints the settings and stops. It does not train.
@@ -104,7 +104,7 @@ Test images and masks must not guide training or parameter selection. Masks sele
 Choose the directory name before you start. Use a name that does not already contain a training pair. For example:
 
 ```sh
-python compare_depth.py --output-dir checkpoint/scan40_pair_new --run
+python -m experiments.compare_depth --output-dir checkpoint/scan40_pair_new --run
 ```
 
 The command trains depth on, then depth off. On an RTX 4070 Laptop GPU, depth on took 46 minutes, depth off 26 minutes, and each score about 4 minutes: about 1 hour 20 minutes in total. It saves `protocol.json` before training. That record includes the code revision, local changes, code hashes, data-validation record, seed, weights, training settings, and expected checkpoint paths.
@@ -132,11 +132,11 @@ Check the stored step numbers and the training record first:
 python -m notebooks.evaluate_pair --check-only
 ```
 
-Run `eval_dtu.py` for each saved model:
+Run `python -m tools.eval_dtu` for each saved model:
 
 ```sh
-python eval_dtu.py --checkpoint checkpoint/scan40_pair_new/off/checkpoint_20000.pt --scale 2
-python eval_dtu.py --checkpoint checkpoint/scan40_pair_new/on/checkpoint_20000.pt --scale 2
+python -m tools.eval_dtu --checkpoint checkpoint/scan40_pair_new/off/checkpoint_20000.pt --scale 2
+python -m tools.eval_dtu --checkpoint checkpoint/scan40_pair_new/on/checkpoint_20000.pt --scale 2
 ```
 
 To save full-precision per-view scores, both means, the signed difference, checkpoint hashes, and the training record in one file, run:
@@ -145,7 +145,7 @@ To save full-precision per-view scores, both means, the signed difference, check
 python -m notebooks.evaluate_pair
 ```
 
-It writes `notebooks/results/scan40.json`, which notebook 2 reads, and two text logs beside it. It evaluates at scale 2. It does not train. For an automated run, the combined command can replace the two separate evaluation calls because it calls the same `eval_dtu.evaluate` function for each checkpoint.
+It writes `notebooks/results/scan40.json`, which notebook 2 reads, and two text logs beside it. It evaluates at scale 2. It does not train. For an automated run, the combined command can replace the two separate evaluation calls because it calls the same `tools.eval_dtu.evaluate` function for each checkpoint.
 
 The report uses the arithmetic mean of **25 per-view foreground RGB PSNR values**. It does not use training-batch PSNR or pooled error over all test pixels. Report `on minus off` in dB. Report a tie or decline as measured. RGB PSNR alone does not establish better geometry. A geometry claim needs separate reference depth or geometry and an appropriate error measure.
 
@@ -178,14 +178,14 @@ Copy this task and replace the output directory if it already exists:
 ```text
 Read AGENTS.md and docs/dtu_test.md. Work from the repository root.
 Set up PyTorch, NumPy, Pillow, and huggingface_hub. Use CUDA when available.
-Get IDR-format DTU scan 40 with python prepare_dtu.py --download, or validate
-an existing copy with python prepare_dtu.py. Do not download other scans.
-Run python compare_depth.py to read the protocol. Keep the current settings:
+Get IDR-format DTU scan 40 with python -m tools.prepare_dtu --download, or validate
+an existing copy with python -m tools.prepare_dtu. Do not download other scans.
+Run python -m experiments.compare_depth to read the protocol. Keep the current settings:
 views 25, 22, 28; seed 42; 20,000 steps; training scale 4; Adam; the same RGB
 sampling and bounds schedule. Change only the depth weight. Do not use test
 photos or masks to select parameters. Use separate depth sampling randomness.
 Train both conditions in a new checkpoint/scan40_pair_new directory with
-compare_depth.py --run. Preserve the protocol.json file. Check that both
+python -m experiments.compare_depth --output-dir checkpoint/scan40_pair_new --run. Preserve the protocol.json file. Check that both
 checkpoint_20000.pt files exist and contain step 20000. Evaluate both at
 scale 2 with python -m notebooks.evaluate_pair, then save the notebook images
 with python -m notebooks.render_scan40_views.

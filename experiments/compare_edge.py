@@ -20,7 +20,7 @@ import torch
 
 import dtu
 import train as training
-from eval_dtu import EVAL_SCALE, evaluate
+from tools.eval_dtu import EVAL_SCALE, evaluate
 from provenance import file_hashes, git, relative
 from train import NUM_STEPS, SCALE, SEED, train
 
@@ -32,8 +32,8 @@ PILOT_STEPS = 5000
 PILOT_LAMBDAS = (0.01, 0.1, 1.0)
 # Training-split views not used by the 3-view runs. They are not test views.
 VALIDATION_VIEWS = tuple(dtu.TRAIN_IDS[3:6])
-SOURCES = ("train.py", "model.py", "data.py", "dtu.py", "eval_dtu.py", "eval_edges.py",
-           "compare_edge.py", "provenance.py")
+SOURCES = ("train.py", "model.py", "data.py", "dtu.py", "tools/eval_dtu.py", "tools/eval_edges.py",
+           "experiments/compare_edge.py", "provenance.py")
 
 
 def device():
@@ -121,7 +121,7 @@ def save_edge_map(path):
 
 
 def score(output, results):
-    from eval_edges import evaluate_edges
+    from tools.eval_edges import evaluate_edges
 
     protocol = json.loads((output / "protocol.json").read_text())
     checkpoints = {name: Path(path) for name, path in protocol["checkpoints"].items()}

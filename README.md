@@ -2,6 +2,50 @@
 
 Teodor Cirstoiu and Vishal Chopra
 
+## Open the notebooks
+
+Download and extract the full repository, or clone it. Open a terminal in the `regNerF` folder.
+Use Python **3.11 or later**. Create and activate an environment:
+
+```sh
+python -m venv .venv
+```
+
+In Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+On macOS or Linux:
+
+```sh
+source .venv/bin/activate
+```
+
+Install the required notebook packages: PyTorch, marimo, NumPy, and Pillow.
+
+```sh
+python -m pip install -r requirements-notebooks.txt
+python -m notebooks.open_notebook --notebook 1
+```
+
+Close the notebook server with `Ctrl+C`. Then open the next notebook:
+
+```sh
+python -m notebooks.open_notebook --notebook 2
+python -m notebooks.open_notebook --notebook 3
+```
+
+Run one launcher command at a time. The launcher opens the interactive reading view by default. Add `--edit` to open the code editor. Use the live notebooks for controls; static HTML exports do not calculate new results.
+
+PyTorch is required for the notebook environment and is installed by the command above. Check whether it can use CUDA:
+
+```sh
+python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+```
+
+The camera panels and optional toy training use CUDA when available and otherwise use the CPU.
 ## Study question
 
 Does encouraging better geometry improve novel view rendering when we only have a few images?
@@ -42,25 +86,19 @@ This is a **single-scan investigation of RegNeRF Table 3**. The paper reports a 
 
 ## Extension
 
-Our regularizer keeps the original L2 depth penalty and adds a weighted L1 penalty on fine depth. A blur and Sobel filters detect colour gradients in rendered patches. Strong colour gradients reduce the added penalty. The colour weights receive no gradients.
+Teodor's extension adds a weighted L1 depth penalty to RegNeRF. Colour edges reduce its weight; the original L2 penalty stays active. On DTU scan 40, it increases mean foreground RGB PSNR by **0.38 dB**, with gains in 20 of 25 test views.
 
-We test a synthetic pendant with known depth. Both models use three training views, seed 42, 8,000 steps, coarse jitter, and coarse and fine L2 weights of 0.1. The added L1 coefficient is 0.1, fixed before training. The completed baseline was reused after checks of its settings, source, and scene files.
+| RegNeRF | RegNeRF + edge L1 | Edge L1 minus RegNeRF |
+| --- | --- | --- |
+| 18.37 dB | 18.76 dB | **+0.38 dB** |
 
-We measure depth RMSE in a two-pixel band on both sides of true pendant and chain boundaries. We also measure the flat back panel, excluding seven pixels around non-panel pixels. The scores below are arithmetic means of three per-view scores.
+Scores are average of 25 test-view foreground RGB PSNR values at step 20,000 and scale 2. This pair uses its own **18.37 dB baseline**.
 
-| Measure | RegNeRF | RegNeRF + edge L1 | Change |
-| --- | --- | --- | --- |
-| Boundary depth RMSE, scene units | 0.6057 | 0.5053 | 16.6% lower |
-| Flat-panel depth RMSE, scene units | 0.3350 | 0.1776 | 47.0% lower |
-| Foreground RGB PSNR | 20.10 dB | 19.65 dB | **−0.45 dB** |
-
-Depth error decreases, but image quality decreases by this RGB measure. The chain and cutouts still have errors. This is one scene and one seed. The three evaluation cameras were used in earlier studies, so this is an exploratory result. See the [extension record](notebooks/results/pendant/results.json).
-
-Our next test would be to compare the uniform L1 with added weighted L1 at the same coefficient. This would separate the effect of colour weights from the effect of adding another penalty.
+The mark inside the opening is reduced, but depth edges remain blurred. No reference depth is available to measure shape error. This is a single-scan investigation of RegNeRF Table 3, with one seed. [Notebook 3](notebooks/03_extension.py) contains the small depth experiments and arch comparisons.
 
 ## Interactive visualization
 
-Use the controls to compare models, camera views, RGB images, depth maps, and errors. In the toy case, move a depth patch and inspect the change in its penalty. In the paper notebook, select a test view or optionally render a moved camera. In the extension, change the colour guide and compare L1 and L2 fits before you inspect the saved pendant results.
+Use the controls to compare models, camera views, RGB images, depth maps, and errors. In the toy case, move a depth patch and inspect the change in its penalty. In the paper notebook, select a test view or optionally render a moved camera. In the extension, connect or disconnect two pixels, spread a depth step, and change the colour guide. Then compare saved RGB and depth for the stone arch. Use the two camera sliders to look around it from a new position, then select **Render view**.
 
 ## Path through the notebooks
 
@@ -69,60 +107,10 @@ The three notebooks form one investigation. They are interactive **marimo notebo
 | Order | Notebook | What to change and inspect | Time |
 | --- | --- | --- | --- |
 | 1 | [Toy case](notebooks/01_toy.py) | Change camera coverage, move a depth patch, and compare smoothing off and on. Inspect RGB and known depth at 100, 300, and 1,000 training steps. | 15 min |
-| 2 | [Paper result](notebooks/02_paper.py) | Switch among 25 scan 40 test views. Compare images, depth, and per-view RGB scores. Optionally render a moved camera. | 15 min |
-| 3 | [Extension](notebooks/03_extension.py) | Compare L1 and L2 penalties in a small depth problem. Change the colour guide. Then inspect the trained pendant at three cameras. | 15 min |
+| 2 | [Paper result](notebooks/02_paper.py) | Switch among 25 DTU scan 40 test views. Compare images, depth, and per-view RGB scores. Optionally render a moved camera. | 15 min |
+| 3 | [Extension](notebooks/03_extension.py) | Test neighbour smoothing, L1/L2 costs, and colour guides. Inspect all 25 test views, then turn the camera around the arch and compare both models. | 15 min |
 
-**Total lesson time: about 45 minutes**, plus environment setup. The saved lessons need no GPU, DTU download, or local training outputs.
-
-## Environment and setup
-
-Use Python **3.11 or later**. Run commands from the repository root. Create and activate an environment first:
-
-```sh
-python -m venv .venv
-```
-
-In Windows PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-On macOS or Linux:
-
-```sh
-source .venv/bin/activate
-```
-
-Install the required notebook packages: PyTorch, marimo, NumPy, and Pillow.
-
-```sh
-python -m pip install -r requirements-notebooks.txt
-```
-
-Open the first notebook.
-```sh
-python -m notebooks.open_notebook --notebook 1
-```
-
-Close the notebook server with `Ctrl+C`. Then open the next notebook:
-
-```sh
-python -m notebooks.open_notebook --notebook 2
-python -m notebooks.open_notebook --notebook 3
-```
-
-Run one launcher command at a time. The launcher opens the interactive reading view by default. Add `--edit` to open the code editor. Use the live notebooks for controls; static HTML exports do not calculate new results.
-
-PyTorch is required for the notebook environment and is installed by the command above. Check whether it can use CUDA:
-
-```sh
-python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
-```
-
-These optional notebook tasks use CUDA when available and otherwise use the CPU. The toy archive, scan 40 reference images, saved comparisons, and pendant panels are included. The moved-camera panel uses the models in `notebooks/models/`.
-
-If you already use `uv`, `uv sync` installs the full project environment, including PyTorch. Use `uv run python` in place of `python` for the commands above.
+**Total lesson time: about 45 minutes**, plus environment setup. Opening the notebooks does not start training.
 
 ## Division of work
 
@@ -130,6 +118,6 @@ The table follows the repository commit history. Both members contributed to the
 
 | Team member | Work |
 | --- | --- |
-| **Vishal Chopra** | Initial model, data loading, training, and rendering code; RegNeRF adaptation and depth-loss fixes; initial toy notebook and controlled DTU training guide; |
-| **Teodor Cirstoiu** | Current edge-detection regularizer and comparison code; coarse jitter; five-seed toy rerun; toy and paper notebook revisions; scan 40 evaluation results, 25-view selector, and shared model weights; `uv` environment setup. |
+| **Vishal Chopra** | Initial model, data loading, training, and rendering code; RegNeRF adaptation and depth-loss fixes; DTU training guide; |
+| **Teodor Cirstoiu** | Edge-detection regularizer and comparison code; coarse jitter; toy, paper and extension notebooks; |
 | **Both** | Toy lesson development, refinement of the test procedure, and notebook documentation. |

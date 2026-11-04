@@ -44,7 +44,7 @@ We score both models at step 20,000 and evaluation scale 2. We report the **arit
 
 This is a **single-scan investigation of RegNeRF Table 3**. The paper reports a benchmark aggregate with a different training setup. Here, scan 40 tests image quality; the synthetic scenes provide known depth for geometry tests.
 
-The [evaluation record](notebooks/results/scan40.json) stores checkpoint paths, code revision, local changes, seed, depth weights, jitter, step count, scale, and per-view scores. Moved-camera renders have no reference photo and do not change the official result.
+The [evaluation record](../notebooks/results/scan40.json) stores checkpoint paths, code revision, local changes, seed, depth weights, jitter, step count, scale, and per-view scores. Moved-camera renders have no reference photo and do not change the official result.
 
 ## Extension
 
@@ -64,7 +64,7 @@ We evaluate both checkpoints at step 20,000 and scale 2. The table reports the *
 
 Select any of the 25 test views to inspect the arch opening, pillar edges, and top block. Each view shows both models and their RGB scores. The mean score uses all 25 test views. The depth panels use one shared scale: dark means near and light means far. The left reference panel is a colour photo.
 
-The added term reduces the vertical mark inside the opening. The depth boundary remains blurred, and both models distort the top block. **No reference depth is available for this scan, so we cannot measure boundary or flat-surface depth error.** The small simulations' depth scores do not apply to the arch. This is one scan and one seed, not the paper's benchmark aggregate. See the [extension record](notebooks/results/partner_stone/results.json) for checkpoint paths, source hashes, settings, and all 25 scores. Earlier pendant results are separate from this notebook.
+The added term reduces the vertical mark inside the opening. The depth boundary remains blurred, and both models distort the top block. **No reference depth is available for this scan, so we cannot measure boundary or flat-surface depth error.** The small simulations' depth scores do not apply to the arch. This is one scan and one seed, not the paper's benchmark aggregate. See the [extension record](../notebooks/results/partner_stone/results.json) for checkpoint paths, source hashes, settings, and all 25 scores. Earlier pendant results are separate from this notebook.
 
 Next, compare added uniform L1 with added weighted L1 at the same coefficient. Repeat with more seeds and use reference depth to measure errors at true boundaries and on flat surfaces.
 
@@ -78,9 +78,9 @@ The three notebooks form one investigation. They are interactive **marimo notebo
 
 | Order | Notebook | What to change and inspect | Time |
 | --- | --- | --- | --- |
-| 1 | [Toy case](notebooks/01_toy.py) | Change camera coverage, move a depth patch, and compare smoothing off and on. Inspect RGB and known depth at 100, 300, and 1,000 training steps. | 15 min |
-| 2 | [Paper result](notebooks/02_paper.py) | Switch among 25 scan 40 test views. Compare images, depth, and per-view RGB scores. Optionally render a moved camera. | 25 min |
-| 3 | [Extension](notebooks/03_extension.py) | Test neighbour smoothing, L1/L2 costs, and colour guides. Inspect all 25 test views, then turn the camera around the arch and compare both models. | 30 min |
+| 1 | [Toy case](../notebooks/01_toy.py) | Change camera coverage, move a depth patch, and compare smoothing off and on. Inspect RGB and known depth at 100, 300, and 1,000 training steps. | 15 min |
+| 2 | [Paper result](../notebooks/02_paper.py) | Switch among 25 scan 40 test views. Compare images, depth, and per-view RGB scores. Optionally render a moved camera. | 25 min |
+| 3 | [Extension](../notebooks/03_extension.py) | Test neighbour smoothing, L1/L2 costs, and colour guides. Inspect all 25 test views, then turn the camera around the arch and compare both models. | 30 min |
 | 4 | Team discussion | State what improved, what did not, and which test should come next. | 5 min |
 
 **Total lesson time: about 75 minutes**, plus environment setup. Opening the notebooks does not start training. The saved lessons need no GPU, DTU download, or local training outputs.
@@ -145,9 +145,9 @@ Notebook 3 also has a full horizontal turn and a vertical turn from −90° to 9
 
 Hardware and other work can change these times. Package-download time is separate. We have no verified total runtime for rebuilding all three studies, including the stone-arch extension. Full retraining is not part of the 75-minute lesson.
 
-For new DTU training, follow the [data and training guide](docs/dtu_test.md). Read the protocol with `python compare_depth.py` first. Training requires `--run` and a new `--output-dir`. Keep earlier checkpoints. Use `python eval_dtu.py --checkpoint PATH` for each model at the same evaluation scale.
+For new DTU training, follow the [data and training guide](dtu_test.md). Read the protocol with `python -m experiments.compare_depth` first. Training requires `--run` and a new `--output-dir`. Keep earlier checkpoints. Use `python -m tools.eval_dtu --checkpoint PATH` for each model at the same evaluation scale.
 
-The [notebook guide](notebooks/README.md) gives commands to rebuild saved evidence. The saved lessons do not need its DTU download steps; use those steps only to prepare new training data. Retraining the extension requires the scan 40 data and the baseline checkpoint recorded in `notebooks/results/partner_stone/results.json`. The saved Notebook 3 lesson needs neither.
+The [notebook guide](../notebooks/README.md) gives commands to rebuild saved evidence. The saved lessons do not need its DTU download steps; use those steps only to prepare new training data. Retraining the extension requires the scan 40 data and the baseline checkpoint recorded in `notebooks/results/partner_stone/results.json`. The saved Notebook 3 lesson needs neither.
 
 ## Division of work
 

@@ -3,7 +3,7 @@
 Render every held-out test view (colour and depth) from the depth-off and depth-on checkpoints, at
 a small size (scale 4, 400 x 300) as JPEG. The notebook reads these files, so the lab needs no
 checkpoints and no GPU, and students can switch between views at once. It saves no DTU photos:
-the notebook reads those from data/dtu/scan40, which students download with prepare_dtu.py.
+the notebook reads bundled copies from notebooks/results/scan40_reference.
 
   python -m notebooks.render_scan40_views
 """

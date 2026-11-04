@@ -472,7 +472,7 @@ def _(mo):
                         - **Scoring:** both models at the same step, at evaluation scale 2, on the 25 test views
                           from `dtu.py`.
                         - **Neither model** has RegNeRF's appearance loss.
-                        - **Record:** `compare_depth.py` writes the code revision, settings, and checkpoint paths
+                        - **Record:** `experiments/compare_depth.py` writes the code revision, settings, and checkpoint paths
                           to `protocol.json` before training. `evaluate_pair.py` checks the pair against it and
                           stores it in the evaluation record.
                         """

@@ -166,11 +166,11 @@ def main():
         raise ValueError("Use the three pendant views 25, 22, and 28.")
     args.output_dir.mkdir(parents=True, exist_ok=False)
     sources = ("train.py", "model.py", "data.py", "dtu.py", "generate_sphere.py",
-               "canny_regularizer.py", "compare_canny_weights.py", "provenance.py")
+               "canny_regularizer.py", "experiments/compare_canny_weights.py", "provenance.py")
     snapshot = args.output_dir / "source"
     snapshot.mkdir()
     for source in sources:
-        shutil.copy2(source, snapshot / source)
+        shutil.copy2(source, snapshot / Path(source).name)
     shutil.copy2(args.scene / "design.py", snapshot / "pendant_design.py")
     input_files = [str(args.scene / "transforms_train.json"), str(args.scene / "design.py")]
     input_files += [str(args.scene / (frame["file_path"] + ".png")) for frame in metadata["frames"]]

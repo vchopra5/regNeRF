@@ -13,10 +13,10 @@ import time
 from types import SimpleNamespace
 
 
-def worker():
+def worker(live_camera=False):
     class NoTraining(importlib.abc.MetaPathFinder):
         def find_spec(self, fullname, path=None, target=None):
-            if fullname.split(".")[0] in ("torch", "train"):
+            if fullname.split(".")[0] == "train" or (not live_camera and fullname.split(".")[0] == "torch"):
                 raise ImportError(f"Disabled for the fresh-copy check: {fullname}")
 
     sys.meta_path.insert(0, NoTraining())
@@ -24,6 +24,9 @@ def worker():
     assert not (root / "checkpoint").exists() and not (root / "data").exists()
     assert not (root / "notebooks/assets/two_spheres").exists()
     started = time.perf_counter()
+    if live_camera:
+        import torch
+        torch.set_num_threads(4)
     counts = {}
     for name in ("01_toy", "02_paper", "03_extension"):
         spec = importlib.util.spec_from_file_location(name, root / "notebooks" / f"{name}.py")
@@ -43,11 +46,15 @@ def worker():
                 module.app.run(defs={"view_choice": SimpleNamespace(value=view)})
                 count += 1
             # The optional live render must show a useful message without PyTorch.
-            module.app.run(defs={"camera_settings": SimpleNamespace(value={"angle": 10})})
+            outputs, _ = module.app.run(defs={"camera_settings": SimpleNamespace(value={"angle": 10})})
+            if live_camera:
+                assert "Rendered on" in "\n".join(getattr(o, "text", "") for o in outputs)
             count += 1
         else:
-            module.app.run(defs={"orbit_settings": SimpleNamespace(
+            outputs, _ = module.app.run(defs={"orbit_settings": SimpleNamespace(
                 value={"horizontal": 20, "vertical": 10})})
+            if live_camera:
+                assert "Rendered in" in "\n".join(getattr(o, "text", "") for o in outputs)
             count += 1
             for guide in ("Aligned edge", "Texture edge", "Missing colour edge"):
                 for penalty in ("L1", "L2"):
@@ -70,10 +77,10 @@ def worker():
                 count += 1
         counts[name] = count
         print(f"{name}: {count} saved-data checks passed", flush=True)
-    assert "torch" not in sys.modules and "train" not in sys.modules
+    assert ("torch" in sys.modules) == live_camera and "train" not in sys.modules
     assert not (root / "checkpoint").exists() and not (root / "data").exists()
     report = dict(checks=counts, seconds=time.perf_counter()-started,
-                  torch_imported=False, training_imported=False,
+                  torch_imported=live_camera, training_imported=False,
                   downloaded_data_present=False, training_output_present=False)
     (root / "verification.json").write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2), flush=True)
@@ -82,25 +89,39 @@ def worker():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worker", action="store_true")
+    parser.add_argument("--live-camera", action="store_true",
+                        help="Also render both notebook camera panels from the bundled models.")
     args = parser.parse_args()
     if args.worker:
-        worker()
+        worker(args.live_camera)
         return
     root = Path(__file__).resolve().parents[1]
     exports = root / "notebooks/exports"
     exports.mkdir(exist_ok=True)
     clean = Path(tempfile.mkdtemp(prefix="fresh_notebooks_", dir=exports))
-    shutil.copytree(root / "notebooks", clean / "notebooks",
-                    ignore=shutil.ignore_patterns("exports", "__pycache__", "__marimo__", "assets"))
-    assets = clean / "notebooks/assets"
-    assets.mkdir()
-    shutil.copy2(root / "notebooks/assets/regnerf_figure_1.png", assets)
-    for name in ("model.py", "data.py", "dtu.py", "render.py"):
-        shutil.copy2(root / name, clean / name)
+    # Copy only files distributed with the repository, including pending new files.
+    # A downloaded ZIP has no .git folder; use the same exclusions in that case.
+    if (root / ".git").exists():
+        names = subprocess.check_output(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=root
+        ).decode("utf-8").split("\0")
+        files = [root / name for name in sorted(set(names)) if name and (root / name).is_file()]
+    else:
+        excluded = {".git", ".venv", ".lab_runtime", "__pycache__", "__marimo__", "exports",
+                    "checkpoint", "data", "renders", "two_spheres"}
+        files = []
+        for folder, dirs, names in os.walk(root):
+            dirs[:] = [d for d in dirs if d not in excluded and not d.startswith("nerf_synthetic")]
+            files.extend(Path(folder) / name for name in names)
+    for source in files:
+        destination = clean / source.relative_to(root)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
     env = os.environ.copy()
     env.update(PYTHONPATH=str(clean), OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", OMP_NUM_THREADS="1")
     print(f"Fresh copy: {clean}", flush=True)
-    subprocess.run([sys.executable, "-u", "-m", "notebooks.verify_saved_notebooks", "--worker"],
+    subprocess.run([sys.executable, "-u", "-m", "notebooks.verify_saved_notebooks", "--worker",
+                    *(["--live-camera"] if args.live_camera else [])],
                    cwd=clean, env=env, check=True)
 
 

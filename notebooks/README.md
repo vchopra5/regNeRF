@@ -1,6 +1,6 @@
 # Depth smoothness lab
 
-Use the notebooks in order. Allow one hour for the team review.
+Use the notebooks in order. Allow about 75 minutes for the team review.
 
 | File | Time | Task |
 | --- | --- | --- |
@@ -82,9 +82,8 @@ no DTU download is needed. Each render reports its elapsed time. New angles have
 photo, so they do not receive a PSNR score. The small depth experiments and saved-view controls
 do not render or train. The camera panel renders only after you select the button.
 
-Run `python -m notebooks.verify_saved_notebooks` to test a fresh copy. The check excludes
-downloaded data, local training outputs, and unpacked toy assets. It blocks PyTorch and trainer
-imports, opens all three notebooks, and checks the saved cameras. It also checks the L1/L2,
+Run `python -m notebooks.verify_saved_notebooks --live-camera` to test a clean copy, including both camera panels. Use the command without `--live-camera` to test the saved lessons with PyTorch blocked. The check excludes
+downloaded data, local training outputs, and unpacked toy assets. It blocks training, opens all three notebooks, and checks every saved camera. The default check also blocks PyTorch; `--live-camera` permits model rendering. It also checks the L1/L2,
 strength, guide, neighbour-link, and ramp controls in Notebook 3.
 
 ## Files included for the toy lesson
@@ -117,8 +116,8 @@ maintainers who need to replace the saved evidence.
 Prepare the results once, before the lab:
 
 ```sh
-uv run python prepare_dtu.py --download
-uv run python compare_depth.py --output-dir checkpoint/scan40_pair_new --run
+uv run python -m tools.prepare_dtu --download
+uv run python -m experiments.compare_depth --output-dir checkpoint/scan40_pair_new --run
 uv run python -m notebooks.evaluate_pair
 uv run python -m notebooks.render_scan40_views
 ```

@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 import dtu
 import train as training
-from eval_dtu import EVAL_SCALE, evaluate
+from tools.eval_dtu import EVAL_SCALE, evaluate
 from provenance import file_hashes, git
 from train import DEPTH_DECAY_STEPS, NUM_STEPS, SCALE, SEED, add_render_settings, train
 
@@ -51,8 +51,8 @@ def main():
                     config={k: getattr(training, k) for k in ("BATCH_SIZE", "DEPTH_RAYS", "PATCH_SIZE",
                             "LR_INIT", "LR_FINAL", "LR_DELAY_STEPS", "LR_DELAY_MULT", "BOUND_STEPS",
                             "INITIAL_RANGE_FRACTION", "DEPTH_DECAY_STEPS")},
-                    code_sha256=file_hashes(("train.py", "model.py", "data.py", "dtu.py", "compare_depth.py",
-                                             "eval_dtu.py", "provenance.py")),
+                    code_sha256=file_hashes(("train.py", "model.py", "data.py", "dtu.py", "experiments/compare_depth.py",
+                                             "tools/eval_dtu.py", "provenance.py")),
                     checkpoints={name: str(args.output_dir / name / f"checkpoint_{NUM_STEPS}.pt") for name, _ in conditions})
     validation = scene / "validation.json"
     if validation.is_file():

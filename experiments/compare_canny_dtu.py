@@ -16,8 +16,8 @@ import train as training
 from provenance import file_hashes, git
 
 
-SOURCES = ("compare_canny_dtu.py", "train.py", "model.py", "data.py", "dtu.py",
-           "eval_dtu.py", "render.py", "provenance.py", "canny_regularizer.py")
+SOURCES = ("experiments/compare_canny_dtu.py", "train.py", "model.py", "data.py", "dtu.py",
+           "tools/eval_dtu.py", "render.py", "provenance.py", "canny_regularizer.py")
 MODES = ("canny_weight", "regnerf")
 
 
@@ -96,7 +96,7 @@ def main():
     snapshot = output / "source"
     snapshot.mkdir()
     for source in SOURCES:
-        shutil.copy2(source, snapshot / source)
+        shutil.copy2(source, snapshot / Path(source).name)
     inputs = [str(Path("data/dtu/scan40/cameras.npz"))]
     inputs += [str(Path("data/dtu/scan40/image") / f"{i:06}.png") for i in dtu.TRAIN_IDS[:3]]
     record = dict(scene=str(scene), seed=42, steps=training.NUM_STEPS,

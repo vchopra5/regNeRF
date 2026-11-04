@@ -14,7 +14,7 @@ import torch
 from PIL import Image, ImageDraw, ImageFont
 
 
-ROOT = Path(__file__).resolve().parent
+from provenance import ROOT
 SAVED = ROOT / "checkpoint/canny_l1_pendant_8k_20261103"
 SCENE = ROOT / "checkpoint/ginkgo_20261102_162816"
 REVISION = "92d882b6f5106c78fccb2c67691b6eb80652a358"

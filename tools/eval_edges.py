@@ -14,7 +14,7 @@ occlusion boundary, so it locates where depth should change sharply. For each te
 Distances are Chebyshev distances (repeated 3 x 3 dilation), capped at DISTANCE_CAP px.
 All sizes are in pixels at the evaluation scale.
 
-  python eval_edges.py --checkpoint PATH [--views 1 2 ...]
+  python -m tools.eval_edges --checkpoint PATH [--views 1 2 ...]
 """
 
 import argparse
@@ -29,7 +29,7 @@ from PIL import Image
 
 import dtu
 from data import get_rays
-from eval_dtu import EVAL_SCALE
+from tools.eval_dtu import EVAL_SCALE
 from model import load_model, render_rays
 from train import sobel_magnitude
 

@@ -10,9 +10,9 @@ dependencies = [
 ]
 
 [dependency-groups]
-# The toy lesson. Same pin as requirements-notebooks.txt.
+# The three lab notebooks. Same pin as requirements-notebooks.txt.
 notebooks = ["marimo==0.25.2"]
-# Only `python prepare_dtu.py --download` needs this.
+# Only `python -m tools.prepare_dtu --download` needs this.
 data = ["huggingface_hub>=0.23"]
 
 [tool.uv]

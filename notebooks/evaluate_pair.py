@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 import torch
 
-from eval_dtu import EVAL_SCALE, evaluate
+from tools.eval_dtu import EVAL_SCALE, evaluate
 from notebooks.lab import ROOT
 from train import NUM_STEPS
 from provenance import git, relative
