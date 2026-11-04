@@ -93,7 +93,7 @@ def _(PAPER, downloaded, mo, scene, small):
         1. What the paper reports
         2. The cameras and the three training photos
         3. New cameras
-           - Move the camera and render a new image
+           - 3a. What changes when you move the camera?
         4. The score over 25 new cameras
         """
     )
@@ -456,7 +456,7 @@ def _(mo):
                 - In section 3a, what changed when you moved the camera? Which visible structures stayed stable?
 
                 **Next.** Smoothing helps inside a surface, but a real depth edge should stay sharp. Notebook 3
-                tests a penalty that relaxes at image edges.
+                adds an L1 depth term that relaxes at colour edges, and compares it with this RegNeRF model.
                 """
             ),
             mo.accordion(

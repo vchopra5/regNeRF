@@ -1,0 +1,199 @@
+Baseline: RegNeRF, checkpoint/scan40_pair_new/on, seed 42, views 25, 22, 28, 20000 steps.
+Edge run: the same settings plus lambda x edge-aware L1 depth term on the fine level.
+Pilot: 5000 steps, lambda in (0.01, 0.1, 1.0), scored on validation views (40, 44, 48) only.
+Score: foreground PSNR on the 25 test views at scale 2, plus mask-edge metrics.
+Checkpoint checkpoint/scan40_pair_new/on/checkpoint_5000.pt | scene data/dtu/scan40 | scale 2
+View 40 | 307175 foreground pixels | 13.272 dB
+View 44 | 249173 foreground pixels | 20.045 dB
+View 48 | 288907 foreground pixels | 18.279 dB
+Mean foreground PSNR (3 selected views): 17.199 dB
+Using device: cuda
+Edge loss weight: 0.01 | Edge scale: 0.35
+Images: torch.Size([9, 300, 400, 3])
+Intrinsics: (np.float64(723.0827306521463), np.float64(720.793870100446), np.float64(205.92637594907066), np.float64(154.89290277604127), np.float64(-0.0001253992939828006))
+Background: black | Training density noise std: 1 | Coarse jitter: True
+Step 1000/20000 | Loss: 0.022389 | Depth weight: 0.1 | PSNR: 21.76 dB
+Step 2000/20000 | Loss: 0.012944 | Depth weight: 0.1 | PSNR: 24.24 dB
+Step 3000/20000 | Loss: 0.010456 | Depth weight: 0.1 | PSNR: 25.27 dB
+Step 4000/20000 | Loss: 0.007568 | Depth weight: 0.1 | PSNR: 26.62 dB
+Step 5000/20000 | Loss: 0.008660 | Depth weight: 0.1 | PSNR: 26.06 dB
+Training complete!
+Checkpoint checkpoint/scan40_edge/pilot/lambda_0.01/checkpoint_5000.pt | scene data/dtu/scan40 | scale 2
+View 40 | 307175 foreground pixels | 12.207 dB
+View 44 | 249173 foreground pixels | 19.451 dB
+View 48 | 288907 foreground pixels | 20.662 dB
+Mean foreground PSNR (3 selected views): 17.440 dB
+Using device: cuda
+Edge loss weight: 0.1 | Edge scale: 0.35
+Images: torch.Size([9, 300, 400, 3])
+Intrinsics: (np.float64(723.0827306521463), np.float64(720.793870100446), np.float64(205.92637594907066), np.float64(154.89290277604127), np.float64(-0.0001253992939828006))
+Background: black | Training density noise std: 1 | Coarse jitter: True
+Step 1000/20000 | Loss: 0.017131 | Depth weight: 0.1 | PSNR: 23.07 dB
+Step 2000/20000 | Loss: 0.018267 | Depth weight: 0.1 | PSNR: 22.77 dB
+Step 3000/20000 | Loss: 0.009633 | Depth weight: 0.1 | PSNR: 25.80 dB
+Step 4000/20000 | Loss: 0.008105 | Depth weight: 0.1 | PSNR: 26.83 dB
+Step 5000/20000 | Loss: 0.008085 | Depth weight: 0.1 | PSNR: 26.52 dB
+Training complete!
+Checkpoint checkpoint/scan40_edge/pilot/lambda_0.1/checkpoint_5000.pt | scene data/dtu/scan40 | scale 2
+View 40 | 307175 foreground pixels | 12.749 dB
+View 44 | 249173 foreground pixels | 19.857 dB
+View 48 | 288907 foreground pixels | 20.818 dB
+Mean foreground PSNR (3 selected views): 17.808 dB
+Using device: cuda
+Edge loss weight: 1 | Edge scale: 0.35
+Images: torch.Size([9, 300, 400, 3])
+Intrinsics: (np.float64(723.0827306521463), np.float64(720.793870100446), np.float64(205.92637594907066), np.float64(154.89290277604127), np.float64(-0.0001253992939828006))
+Background: black | Training density noise std: 1 | Coarse jitter: True
+Step 1000/20000 | Loss: 0.024464 | Depth weight: 0.1 | PSNR: 21.93 dB
+Step 2000/20000 | Loss: 0.023422 | Depth weight: 0.1 | PSNR: 22.58 dB
+Step 3000/20000 | Loss: 0.015221 | Depth weight: 0.1 | PSNR: 25.25 dB
+Step 4000/20000 | Loss: 0.012864 | Depth weight: 0.1 | PSNR: 26.58 dB
+Step 5000/20000 | Loss: 0.010706 | Depth weight: 0.1 | PSNR: 26.21 dB
+Training complete!
+Checkpoint checkpoint/scan40_edge/pilot/lambda_1/checkpoint_5000.pt | scene data/dtu/scan40 | scale 2
+View 40 | 307175 foreground pixels | 11.152 dB
+View 44 | 249173 foreground pixels | 15.965 dB
+View 48 | 288907 foreground pixels | 17.993 dB
+Mean foreground PSNR (3 selected views): 15.037 dB
+lambda     0 | validation mean 17.199 dB
+lambda  0.01 | validation mean 17.440 dB
+lambda   0.1 | validation mean 17.808 dB
+lambda     1 | validation mean 15.037 dB
+Chosen lambda: 0.1
+Using device: cuda
+Edge loss weight: 0.1 | Edge scale: 0.35
+Images: torch.Size([9, 300, 400, 3])
+Intrinsics: (np.float64(723.0827306521463), np.float64(720.793870100446), np.float64(205.92637594907066), np.float64(154.89290277604127), np.float64(-0.0001253992939828006))
+Background: black | Training density noise std: 1 | Coarse jitter: True
+Step 1000/20000 | Loss: 0.017131 | Depth weight: 0.1 | PSNR: 23.07 dB
+Step 2000/20000 | Loss: 0.018267 | Depth weight: 0.1 | PSNR: 22.77 dB
+Step 3000/20000 | Loss: 0.009633 | Depth weight: 0.1 | PSNR: 25.80 dB
+Step 4000/20000 | Loss: 0.008105 | Depth weight: 0.1 | PSNR: 26.83 dB
+Step 5000/20000 | Loss: 0.008085 | Depth weight: 0.1 | PSNR: 26.52 dB
+Step 6000/20000 | Loss: 0.008033 | Depth weight: 0.1 | PSNR: 26.82 dB
+Step 7000/20000 | Loss: 0.006306 | Depth weight: 0.1 | PSNR: 27.79 dB
+Step 8000/20000 | Loss: 0.007944 | Depth weight: 0.1 | PSNR: 27.17 dB
+Step 9000/20000 | Loss: 0.005811 | Depth weight: 0.1 | PSNR: 28.80 dB
+Step 10000/20000 | Loss: 0.005964 | Depth weight: 0.1 | PSNR: 28.31 dB
+Step 11000/20000 | Loss: 0.005934 | Depth weight: 0.1 | PSNR: 28.22 dB
+Step 12000/20000 | Loss: 0.004090 | Depth weight: 0.1 | PSNR: 29.86 dB
+Step 13000/20000 | Loss: 0.005284 | Depth weight: 0.1 | PSNR: 28.56 dB
+Step 14000/20000 | Loss: 0.004010 | Depth weight: 0.1 | PSNR: 30.21 dB
+Step 15000/20000 | Loss: 0.005675 | Depth weight: 0.1 | PSNR: 28.36 dB
+Step 16000/20000 | Loss: 0.003923 | Depth weight: 0.1 | PSNR: 29.98 dB
+Step 17000/20000 | Loss: 0.005716 | Depth weight: 0.1 | PSNR: 28.36 dB
+Step 18000/20000 | Loss: 0.004592 | Depth weight: 0.1 | PSNR: 29.29 dB
+Step 19000/20000 | Loss: 0.005975 | Depth weight: 0.1 | PSNR: 28.12 dB
+Step 20000/20000 | Loss: 0.005003 | Depth weight: 0.1 | PSNR: 29.08 dB
+Training complete!
+Edge metrics | checkpoint/scan40_pair_new/on/checkpoint_20000.pt | scale 2
+View 01 | band 11.18 dB | interior 14.92 dB | strong edges near outline 0.210
+View 02 | band 14.14 dB | interior 15.36 dB | strong edges near outline 0.222
+View 09 | band 13.70 dB | interior 16.70 dB | strong edges near outline 0.295
+View 10 | band 10.22 dB | interior 16.30 dB | strong edges near outline 0.258
+View 11 | band 9.14 dB | interior 16.67 dB | strong edges near outline 0.329
+View 12 | band 9.76 dB | interior 18.67 dB | strong edges near outline 0.286
+View 14 | band 14.19 dB | interior 19.44 dB | strong edges near outline 0.404
+View 15 | band 11.93 dB | interior 18.37 dB | strong edges near outline 0.380
+View 23 | band 15.12 dB | interior 22.31 dB | strong edges near outline 0.394
+View 24 | band 15.47 dB | interior 22.67 dB | strong edges near outline 0.476
+View 26 | band 9.38 dB | interior 19.61 dB | strong edges near outline 0.388
+View 27 | band 10.10 dB | interior 20.56 dB | strong edges near outline 0.344
+View 29 | band 11.21 dB | interior 21.07 dB | strong edges near outline 0.365
+View 30 | band 9.03 dB | interior 17.97 dB | strong edges near outline 0.334
+View 31 | band 9.81 dB | interior 22.46 dB | strong edges near outline 0.490
+View 32 | band 15.48 dB | interior 22.24 dB | strong edges near outline 0.487
+View 33 | band 15.82 dB | interior 21.32 dB | strong edges near outline 0.423
+View 34 | band 15.83 dB | interior 21.89 dB | strong edges near outline 0.468
+View 35 | band 7.84 dB | interior 18.37 dB | strong edges near outline 0.335
+View 41 | band 8.70 dB | interior 17.59 dB | strong edges near outline 0.373
+View 42 | band 14.66 dB | interior 19.94 dB | strong edges near outline 0.439
+View 43 | band 15.26 dB | interior 19.63 dB | strong edges near outline 0.454
+View 45 | band 11.70 dB | interior 21.14 dB | strong edges near outline 0.550
+View 46 | band 8.96 dB | interior 18.42 dB | strong edges near outline 0.415
+View 47 | band 10.37 dB | interior 19.01 dB | strong edges near outline 0.371
+Edge metrics | checkpoint/scan40_edge/edge/checkpoint_20000.pt | scale 2
+View 01 | band 11.65 dB | interior 16.32 dB | strong edges near outline 0.247
+View 02 | band 13.63 dB | interior 16.12 dB | strong edges near outline 0.206
+View 09 | band 14.65 dB | interior 17.59 dB | strong edges near outline 0.295
+View 10 | band 11.21 dB | interior 18.04 dB | strong edges near outline 0.254
+View 11 | band 12.49 dB | interior 18.30 dB | strong edges near outline 0.354
+View 12 | band 10.32 dB | interior 18.54 dB | strong edges near outline 0.309
+View 14 | band 14.30 dB | interior 19.68 dB | strong edges near outline 0.355
+View 15 | band 12.05 dB | interior 19.00 dB | strong edges near outline 0.289
+View 23 | band 14.59 dB | interior 22.28 dB | strong edges near outline 0.355
+View 24 | band 14.88 dB | interior 22.69 dB | strong edges near outline 0.400
+View 26 | band 9.29 dB | interior 19.40 dB | strong edges near outline 0.399
+View 27 | band 10.43 dB | interior 19.52 dB | strong edges near outline 0.376
+View 29 | band 11.48 dB | interior 20.91 dB | strong edges near outline 0.374
+View 30 | band 9.22 dB | interior 18.03 dB | strong edges near outline 0.324
+View 31 | band 10.06 dB | interior 21.70 dB | strong edges near outline 0.468
+View 32 | band 15.58 dB | interior 21.84 dB | strong edges near outline 0.438
+View 33 | band 15.58 dB | interior 21.27 dB | strong edges near outline 0.370
+View 34 | band 14.42 dB | interior 21.62 dB | strong edges near outline 0.474
+View 35 | band 7.44 dB | interior 18.25 dB | strong edges near outline 0.360
+View 41 | band 7.88 dB | interior 17.51 dB | strong edges near outline 0.374
+View 42 | band 15.17 dB | interior 20.31 dB | strong edges near outline 0.465
+View 43 | band 16.27 dB | interior 20.32 dB | strong edges near outline 0.367
+View 45 | band 11.62 dB | interior 20.40 dB | strong edges near outline 0.473
+View 46 | band 9.23 dB | interior 18.61 dB | strong edges near outline 0.371
+View 47 | band 10.53 dB | interior 19.63 dB | strong edges near outline 0.363
+Checkpoint checkpoint/scan40_pair_new/on/checkpoint_20000.pt | scene data/dtu/scan40 | scale 2
+View 01 | 259649 foreground pixels | 14.543 dB
+View 02 | 249726 foreground pixels | 15.334 dB
+View 09 | 277301 foreground pixels | 16.464 dB
+View 10 | 286028 foreground pixels | 15.690 dB
+View 11 | 281498 foreground pixels | 15.852 dB
+View 12 | 299830 foreground pixels | 17.543 dB
+View 14 | 281106 foreground pixels | 18.816 dB
+View 15 | 283208 foreground pixels | 17.594 dB
+View 23 | 277461 foreground pixels | 21.669 dB
+View 24 | 276228 foreground pixels | 21.967 dB
+View 26 | 309794 foreground pixels | 18.027 dB
+View 27 | 301664 foreground pixels | 19.114 dB
+View 29 | 304267 foreground pixels | 19.991 dB
+View 30 | 312986 foreground pixels | 17.244 dB
+View 31 | 294973 foreground pixels | 20.092 dB
+View 32 | 266748 foreground pixels | 21.617 dB
+View 33 | 257153 foreground pixels | 20.858 dB
+View 34 | 268168 foreground pixels | 21.348 dB
+View 35 | 298742 foreground pixels | 16.597 dB
+View 41 | 283604 foreground pixels | 16.179 dB
+View 42 | 249743 foreground pixels | 19.411 dB
+View 43 | 238706 foreground pixels | 19.238 dB
+View 45 | 280801 foreground pixels | 19.846 dB
+View 46 | 306160 foreground pixels | 17.185 dB
+View 47 | 303648 foreground pixels | 18.266 dB
+Mean foreground PSNR (25 test views): 18.419 dB
+Checkpoint checkpoint/scan40_edge/edge/checkpoint_20000.pt | scene data/dtu/scan40 | scale 2
+View 01 | 259649 foreground pixels | 15.906 dB
+View 02 | 249726 foreground pixels | 16.005 dB
+View 09 | 277301 foreground pixels | 17.436 dB
+View 10 | 286028 foreground pixels | 17.369 dB
+View 11 | 281498 foreground pixels | 17.796 dB
+View 12 | 299830 foreground pixels | 17.541 dB
+View 14 | 281106 foreground pixels | 19.113 dB
+View 15 | 283208 foreground pixels | 18.129 dB
+View 23 | 277461 foreground pixels | 21.522 dB
+View 24 | 276228 foreground pixels | 21.870 dB
+View 26 | 309794 foreground pixels | 17.784 dB
+View 27 | 301664 foreground pixels | 18.532 dB
+View 29 | 304267 foreground pixels | 20.042 dB
+View 30 | 312986 foreground pixels | 17.322 dB
+View 31 | 294973 foreground pixels | 19.816 dB
+View 32 | 266748 foreground pixels | 21.302 dB
+View 33 | 257153 foreground pixels | 20.749 dB
+View 34 | 268168 foreground pixels | 20.748 dB
+View 35 | 298742 foreground pixels | 16.225 dB
+View 41 | 283604 foreground pixels | 15.811 dB
+View 42 | 249743 foreground pixels | 19.771 dB
+View 43 | 238706 foreground pixels | 19.973 dB
+View 45 | 280801 foreground pixels | 19.310 dB
+View 46 | 306160 foreground pixels | 17.366 dB
+View 47 | 303648 foreground pixels | 18.821 dB
+Mean foreground PSNR (25 test views): 18.650 dB
+RegNeRF 18.419 dB | + edge 18.650 dB | difference +0.231 dB
+Saved notebooks/results/scan40_edge.json
+Rendered 25 views with regnerf
+Rendered 25 views with edge
+Saved 25 views to notebooks/results/scan40_edge
