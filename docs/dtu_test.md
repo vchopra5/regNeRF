@@ -10,7 +10,9 @@ Use Python 3.10 or later in a separate environment. Activate that environment be
 
 If you need a new environment, run `python -m venv .venv`. Activate it with `.venv\Scripts\Activate.ps1` in PowerShell, or `source .venv/bin/activate` in a POSIX shell. The repository ignores `.venv`.
 
-Install the training packages:
+With uv, run `uv sync` once. It installs the packages from `pyproject.toml` into `.venv`. Then put `uv run` in front of each `python` command below.
+
+Without uv, install the training packages:
 
 ```sh
 python -m pip install torch numpy Pillow huggingface_hub
@@ -105,7 +107,7 @@ Choose the directory name before you start. Use a name that does not already con
 python compare_depth.py --output-dir checkpoint/scan40_pair_new --run
 ```
 
-The command trains depth on, then depth off. It saves `protocol.json` before training. That record includes the code revision, local changes, code hashes, data-validation record, seed, weights, training settings, and expected checkpoint paths.
+The command trains depth on, then depth off. On an RTX 4070 Laptop GPU, depth on took 46 minutes, depth off 26 minutes, and each score about 4 minutes: about 1 hour 20 minutes in total. It saves `protocol.json` before training. That record includes the code revision, local changes, code hashes, data-validation record, seed, weights, training settings, and expected checkpoint paths.
 
 Each condition saves periodic checkpoints and `mipnerf_final.pt`. At the current 20,000-step setting, use:
 
@@ -157,6 +159,18 @@ It writes `notebooks/results/scan40/` with a record of the checkpoints it used. 
 
 Earlier results came from an older step-40000 pair with no training record. Do not treat a 20,000-step run as a reproduction of that run.
 
+## Current result
+
+Pair `checkpoint/scan40_pair_new`, trained at revision `6978712` with no local changes. Seed 42, 20,000 steps, coarse jitter on, evaluation scale 2.
+
+| Model | Mean foreground PSNR (25 test views) |
+| --- | --- |
+| Depth off | 12.36 dB |
+| Depth on | 18.42 dB |
+| On minus off | **+6.06 dB** |
+
+Depth on scored higher in 24 of 25 views. The change per view ranges from −0.97 dB (view 15) to +13.45 dB (view 29). The largest gains are in views where the depth-off model scores 5 to 8 dB. Its renders show large floaters in front of the camera. For comparison, RegNeRF Table 3 reports 18.34 dB without the appearance loss, which this repository also lacks. Its row without geometry regularization (14.34 dB) keeps the appearance loss, so no row matches our depth-off model. This is a single-scan investigation, not the paper's benchmark aggregate. RGB PSNR does not measure depth; the floaters are visual evidence only. The full record, with per-view scores, checkpoint hashes, and the training record, is in `notebooks/results/scan40.json`.
+
 ## 6. Task for another agent
 
 Copy this task and replace the output directory if it already exists:
@@ -180,7 +194,8 @@ weights, settings, checkpoint paths and hashes, all 25 per-view foreground
 PSNR scores for each model, both arithmetic means, and signed on-minus-off
 difference. Report a tie or decline plainly. Describe this as a single-scan
 investigation of RegNeRF Table 3. Keep scan 114 results separate. Do not claim
-better geometry from RGB PSNR alone. Do not commit data, weights, or logs.
+better geometry from RGB PSNR alone. Do not commit data or weights. Commit only
+the small files under notebooks/results/.
 ```
 
 ## Repository size

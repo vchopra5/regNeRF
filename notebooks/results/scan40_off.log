@@ -1,0 +1,27 @@
+Checkpoint checkpoint/scan40_pair_new/off/checkpoint_20000.pt | scene data/dtu/scan40 | scale 2
+View 01 | 259649 foreground pixels | 10.877 dB
+View 02 | 249726 foreground pixels | 11.054 dB
+View 09 | 277301 foreground pixels | 15.071 dB
+View 10 | 286028 foreground pixels | 10.817 dB
+View 11 | 281498 foreground pixels | 6.452 dB
+View 12 | 299830 foreground pixels | 5.486 dB
+View 14 | 281106 foreground pixels | 18.193 dB
+View 15 | 283208 foreground pixels | 18.561 dB
+View 23 | 277461 foreground pixels | 18.001 dB
+View 24 | 276228 foreground pixels | 17.151 dB
+View 26 | 309794 foreground pixels | 6.789 dB
+View 27 | 301664 foreground pixels | 10.324 dB
+View 29 | 304267 foreground pixels | 6.539 dB
+View 30 | 312986 foreground pixels | 7.641 dB
+View 31 | 294973 foreground pixels | 12.283 dB
+View 32 | 266748 foreground pixels | 17.201 dB
+View 33 | 257153 foreground pixels | 15.979 dB
+View 34 | 268168 foreground pixels | 15.789 dB
+View 35 | 298742 foreground pixels | 14.066 dB
+View 41 | 283604 foreground pixels | 13.211 dB
+View 42 | 249743 foreground pixels | 15.398 dB
+View 43 | 238706 foreground pixels | 14.548 dB
+View 45 | 280801 foreground pixels | 11.271 dB
+View 46 | 306160 foreground pixels | 8.495 dB
+View 47 | 303648 foreground pixels | 7.791 dB
+Mean foreground PSNR (25 test views): 12.360 dB

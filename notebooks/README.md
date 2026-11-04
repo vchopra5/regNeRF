@@ -46,11 +46,11 @@ python -m pip install torch
 
 The trainer uses CUDA when a compatible GPU and PyTorch installation are available. Otherwise, it uses the CPU. For 300 steps, allow about 16 minutes per model with four CPU threads. This is an estimate from a short timing test.
 
-Open the other notebooks with `python -m marimo edit notebooks/02_paper.py` or `python -m marimo edit notebooks/03_extension.py`, with the repository root on `PYTHONPATH`. Their data requirements are separate from the toy lesson.
+Open the other notebooks with `python -m marimo edit notebooks/02_paper.py` or `python -m marimo edit notebooks/03_extension.py`, with the repository root on `PYTHONPATH`. Their requirements are separate from the toy lesson. Notebook 2 also needs PyTorch, because it reads the cameras through `dtu.py`; the CPU build is enough. The photo download needs `huggingface_hub`. `uv sync` installs both. With pip, run `python -m pip install torch huggingface_hub`.
 
 ## Files included for the toy lesson
 
-The repository includes `toy_saved_results.zip`, a 1.53 MB archive with 54 small saved files. It contains the reference, three training photos, depth arrays, RGB predictions, and scores required by this lesson. The notebook checks the files and unpacks missing files into the ignored `notebooks/assets/two_spheres` folder on first use. It does not download data or train a model when opened.
+The repository includes `toy_saved_results.zip`, a 1.75 MB archive with 129 small saved files. It contains the reference, three training photos, depth arrays, RGB predictions, and scores required by this lesson. The notebook checks the files against the archive. It unpacks missing files, and replaces files from an older archive, in the ignored `notebooks/assets/two_spheres` folder. It does not download data or train a model when opened.
 
 The paper figure and static fallback figures are also included. No model checkpoints, DTU dataset, local package folder, HTML export, or custom training history is needed. A fresh checkout has six saved comparison scores for each camera. Custom scores appear after you submit your own run.
 
@@ -71,7 +71,7 @@ To measure this on another CPU, run `python -m notebooks.benchmark_toy_cpu --ste
 
 ## Prepare the paper evidence
 
-Notebook 2 reads the model results from `notebooks/results/`, which is in Git, and the DTU photos from `data/dtu/scan40`, which is not. **Before the lab, each student runs `uv run python prepare_dtu.py --download`** (about 120 MB, under a minute, no account needed). The checkpoints are not needed.
+Notebook 2 reads the model results from `notebooks/results/`, which is in Git, and the DTU photos from `data/dtu/scan40`, which is not. **Before the lab, each student runs `uv sync`, then `uv run python prepare_dtu.py --download`** (about 120 MB, under a minute, no account needed). `uv sync` installs PyTorch; allow time for that download too. The checkpoints are not needed.
 
 Prepare the results once, before the lab:
 
@@ -82,7 +82,7 @@ uv run python -m notebooks.evaluate_pair
 uv run python -m notebooks.render_scan40_views
 ```
 
-Training the pair takes about 1 to 1.5 hours on a laptop GPU: about 46 minutes for the depth-on model and less for the depth-off model. Evaluation takes about 8 minutes and rendering about 4 minutes. `compare_depth.py` records the code revision and settings in `protocol.json` before training. `evaluate_pair` checks the pair against that record and writes `notebooks/results/scan40.json`. `render_scan40_views` renders all 25 test views from both models at scale 4 and writes them to `notebooks/results/scan40/` (a few MB of JPEG), so students can switch between views without a model or a GPU. Missing files and photos show a warning with the command that makes them.
+Training the pair took about 1 hour 20 minutes on an RTX 4070 Laptop GPU: 46 minutes for the depth-on model, 26 minutes for the depth-off model, and about 4 minutes to score each. Evaluation takes about 8 minutes and rendering about 4 minutes. `compare_depth.py` records the code revision and settings in `protocol.json` before training. `evaluate_pair` checks the pair against that record and writes `notebooks/results/scan40.json`. `render_scan40_views` renders all 25 test views from both models at scale 4 and writes them to `notebooks/results/scan40/` (a few MB of JPEG), so students can switch between views without a model or a GPU. Missing files and photos show a warning with the command that makes them.
 
 Open the notebook with `env PYTHONPATH=$PWD uv run marimo run notebooks/02_paper.py` (fish) or `PYTHONPATH=$PWD uv run marimo run notebooks/02_paper.py` (bash, zsh).
 

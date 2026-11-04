@@ -19,7 +19,7 @@ from PIL import Image
 import dtu
 from data import get_rays
 from model import load_model, render_rays
-from provenance import file_hashes, git
+from provenance import file_hashes, git, relative
 from train import NUM_STEPS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,7 +73,7 @@ def main():
             depth_image(depth, low, high).save(args.output / f"view{view}_depth_{name}.jpg", quality=90)
 
     record = dict(views=list(dtu.TEST_IDS), scale=args.scale, step=args.step, depth_ranges=depth_ranges,
-                  checkpoints={name: str(path) for name, path in checkpoints.items()},
+                  checkpoints={name: relative(path) for name, path in checkpoints.items()},
                   rendered_utc=datetime.now(timezone.utc).isoformat(), code_revision=git("rev-parse", "HEAD"),
                   code_sha256=file_hashes(("model.py", "data.py", "dtu.py", "notebooks/render_scan40_views.py")))
     (args.output / "render_record.json").write_text(json.dumps(record, indent=2))

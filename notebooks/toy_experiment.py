@@ -56,12 +56,14 @@ def ensure_assets():
             target = (base / name).resolve()
             if not target.is_relative_to(base):
                 raise ValueError(f"The toy archive path is outside the data folder: {name}")
-            payload = target.read_bytes() if target.is_file() else archive.read(name)
+            if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == checksum:
+                continue
+            # Missing, or unpacked from an older archive: take the archive copy.
+            payload = archive.read(name)
             if hashlib.sha256(payload).hexdigest() != checksum:
                 raise ValueError(f"Saved toy data failed its checksum: {name}")
-            if not target.is_file():
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(payload)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
     return ASSETS
 
 
@@ -87,7 +89,7 @@ def prepare_scene(output=ASSETS, extra_angles=()):
 def run_condition(folder, steps, weight, training_scene=ASSETS, stratified=True, seed=TOY_SEED):
     import torch
     import train as training
-    from provenance import file_hashes, git
+    from provenance import file_hashes, git, relative
 
     start = perf_counter()
     views = len(json.loads((training_scene / "transforms_train.json").read_text())["frames"])
@@ -98,7 +100,7 @@ def run_condition(folder, steps, weight, training_scene=ASSETS, stratified=True,
                       heldout_camera=dict(angle=15, elevation=5),
                       coarse_weight=0.1 if weight else 0.0, views=views,
                       training_transforms=json.loads((training_scene / "transforms_train.json").read_text()),
-                      checkpoint=str((folder / "mipnerf_final.pt").resolve()))
+                      checkpoint=relative(folder / "mipnerf_final.pt"))
     training.train(views, training_scene, folder, depth_weight=weight, depth_weight_start=weight,
           stop_after=steps, scale=2, regnerf_density=True, seed=seed, stratified=stratified)
     train_seconds = perf_counter() - start

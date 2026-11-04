@@ -17,7 +17,7 @@ import torch
 from eval_dtu import EVAL_SCALE, evaluate
 from notebooks.lab import ROOT
 from train import NUM_STEPS
-from provenance import git
+from provenance import git, relative
 import dtu
 
 
@@ -70,14 +70,14 @@ def main():
         with contextlib.redirect_stdout(stream):
             _, scores[name] = evaluate(path, args.data_dir, args.scale, 512, device,
                                        return_per_view=True)
-        logs[name] = stream.getvalue()
+        logs[name] = stream.getvalue().replace(f"{ROOT}/", "")  # No home folder in Git.
         if set(scores[name]) != set(dtu.TEST_IDS):
             raise ValueError("Expected one score for each of the 25 test views.")
         print(logs[name], flush=True)
     record = {
         "scene": args.data_dir.name, "step": args.step, "evaluation_scale": args.scale,
         "device": device, "evaluation_utc": datetime.now(timezone.utc).isoformat(),
-        "checkpoints": {name: str(path.resolve()) for name, path in paths.items()},
+        "checkpoints": {name: relative(path) for name, path in paths.items()},
         "checkpoint_sha256": hashes, "evaluation_revision": git("rev-parse", "HEAD"),
         "evaluation_status": git("status", "--short"), "evaluation_local_diff": git("diff", "--", "*.py"),
         "training_provenance": "Unknown. Existing checkpoints do not store training settings or code revision.",

@@ -13,6 +13,8 @@ Run the DTU scan 40 comparison from the project root.
 
 Follow the [DTU data and training guide](docs/dtu_test.md) to download scan 40, check its files, train a new pair, and save the evaluation record. It also contains a task for another agent.
 
+With uv, run `uv sync` once, then put `uv run` in front of each `python` command.
+
 Read the settings before training:
 
 ```sh
@@ -20,6 +22,8 @@ python compare_depth.py
 ```
 
 The script trains the depth-on model first. It reports mean foreground PSNR across 25 test views for each model. A higher score means a closer match to the reference RGB images. Canny is off in both runs.
+
+**Result** (scan 40, seed 42, 20,000 steps, coarse jitter, scale 2): depth off 12.36 dB, depth on 18.42 dB, on minus off **+6.06 dB**. Depth smoothing scored higher in 24 of 25 test views. This is one scan, not the paper's benchmark aggregate. Notebook 2 shows the per-view scores and renders; `notebooks/results/scan40.json` holds the full record.
 
 ## 2. Does masking edges help?
 

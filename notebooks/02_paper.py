@@ -288,6 +288,10 @@ def _(dtu, json, missing, mo, np, per_view_change, result, results, show, stat, 
                 result(
                     f"On this scan, depth smoothing {_effect}. It was better in **{_better} of 25** test views; "
                     f"the change per view ranges from {_delta.min():+.2f} to {_delta.max():+.2f} dB.\n\n"
+                    f"**Against the paper.** Smoothing on ({_on.mean():.2f} dB) compares with the row without "
+                    f"appearance regularization (18.34 dB), because both lack only that loss. Smoothing off "
+                    f"({_off.mean():.2f} dB) has no close row: the paper's row without geometry (14.34 dB) "
+                    "keeps the appearance loss.\n\n"
                     "**Limits.** One scan and one seed. PSNR measures colour, not shape. Notebook 1 showed "
                     "that colour PSNR can vary a lot between seeds.",
                     kind="success" if _mean > 0 else "warn",
@@ -335,9 +339,10 @@ def _(mo):
                 **Questions for discussion**
                 - Does the evidence support better colour prediction on this scan? How large is the change
                   compared with the variation between seeds in notebook 1?
-                - The paper reports +4.55 dB for geometry regularization. Why might one scan, with this code
-                  and without the appearance loss, show a different size of effect?
-                - Which test views changed most in section 4? Where are they in the camera map?
+                - The paper reports +4.55 dB for geometry regularization. Compare both of our means with
+                  the rows in section 1. Which of our two scores is further from the paper, and why?
+                - Which test views changed most in section 4? Where are they in the camera map? Open them
+                  in section 3: what does the smoothing-off model put in front of the camera?
                 - What evidence would you need to claim that the *shape* improved?
 
                 **Next.** Smoothing helps inside a surface, but a real depth edge should stay sharp. Notebook 3
@@ -360,19 +365,6 @@ def _(mo):
                         - **Record:** `compare_depth.py` writes the code revision, settings, and checkpoint paths
                           to `protocol.json` before training. `evaluate_pair.py` checks the pair against it and
                           stores it in the evaluation record.
-                        """
-                    ),
-                    "Prepare the results (before the lab)": mo.md(
-                        """
-                        Students need only the first command; the results are saved in Git. Training takes about
-                        1 to 1.5 hours on a laptop GPU.
-
-                        ```sh
-                        uv run python prepare_dtu.py --download
-                        uv run python compare_depth.py --output-dir checkpoint/scan40_pair_new --run
-                        uv run python -m notebooks.evaluate_pair
-                        uv run python -m notebooks.render_scan40_views   # all 25 test views, about 4 minutes
-                        ```
                         """
                     ),
                 }
