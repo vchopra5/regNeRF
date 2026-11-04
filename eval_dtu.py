@@ -17,12 +17,13 @@ EVAL_SCALE = 2
 
 
 @torch.inference_mode()
-def evaluate(checkpoint, scene, scale, batch_size, device, *, return_per_view=False):
+def evaluate(checkpoint, scene, scale, batch_size, device, *, return_per_view=False,
+             views=dtu.TEST_IDS):
     model = load_model(checkpoint, device, near=dtu.BOUNDS[0], far=dtu.BOUNDS[1])
     scores = []
     print(f"Checkpoint {checkpoint} | scene {scene} | scale {scale}", flush=True)
     with np.load(scene / "cameras.npz") as cameras:
-        for index in dtu.TEST_IDS:
+        for index in views:
             with Image.open(scene / "image" / f"{index:06}.png") as photo:
                 size = photo.size
                 h, w, intrinsics, pose = dtu.camera(cameras, index, size, scale)
@@ -44,9 +45,10 @@ def evaluate(checkpoint, scene, scale, batch_size, device, *, return_per_view=Fa
             scores.append(score)
             print(f"View {index:02} | {count} foreground pixels | {score:.3f} dB", flush=True)
     mean = sum(scores) / len(scores)
-    print(f"Mean foreground PSNR ({len(scores)} test views): {mean:.3f} dB", flush=True)
+    kind = "test" if tuple(views) == dtu.TEST_IDS else "selected"
+    print(f"Mean foreground PSNR ({len(scores)} {kind} views): {mean:.3f} dB", flush=True)
     if return_per_view:
-        return mean, dict(zip(dtu.TEST_IDS, scores))
+        return mean, dict(zip(views, scores))
     return mean
 
 
@@ -57,5 +59,8 @@ if __name__ == "__main__":
     parser.add_argument("--scale", type=positive_int, default=EVAL_SCALE)
     parser.add_argument("--batch-size", type=positive_int, default=512)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--views", type=int, nargs="+", default=list(dtu.TEST_IDS),
+                        help="DTU view IDs to score (default: the 25 test views).")
     args = parser.parse_args()
-    evaluate(args.checkpoint, args.data_dir, args.scale, args.batch_size, args.device)
+    evaluate(args.checkpoint, args.data_dir, args.scale, args.batch_size, args.device,
+             views=tuple(args.views))

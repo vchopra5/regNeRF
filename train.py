@@ -46,6 +46,49 @@ def depth_patch_loss(depth, opacity, edge_weights=None):
     return (weight * (dx.square() + dy.square())).mean()
 
 
+# 3x3 Gaussian (sigma 1) and Sobel kernels for the soft edge map.
+_GAUSS_1D = torch.exp(-0.5 * torch.tensor([-1.0, 0.0, 1.0]) ** 2)
+_GAUSS = torch.outer(_GAUSS_1D, _GAUSS_1D) / torch.outer(_GAUSS_1D, _GAUSS_1D).sum()
+_SOBEL_X = torch.tensor([[-1.0, 0.0, 1.0], [-2.0, 0.0, 2.0], [-1.0, 0.0, 1.0]])
+EDGE_HALO = 2
+EDGE_SCALE_QUANTILE = 0.9
+
+
+def sobel_magnitude(rgb):
+    """Gradient magnitude of the blurred grey image, like the first two Canny steps.
+
+    rgb: [N, H, W, 3] in [0, 1]. Valid convolutions, so the output is [N, H-4, W-4].
+    """
+    grey = (rgb @ rgb.new_tensor([0.299, 0.587, 0.114]))[:, None]
+    blurred = F.conv2d(grey, _GAUSS.to(rgb)[None, None])
+    kernels = torch.stack((_SOBEL_X, _SOBEL_X.T))[:, None].to(rgb)
+    gx, gy = F.conv2d(blurred, kernels).unbind(1)
+    return torch.hypot(gx, gy)
+
+
+def soft_edges(rgb, scale):
+    """Soft edge strength in [0, 1): 0 on flat colour, near 1 on strong edges."""
+    return 1 - torch.exp(-sobel_magnitude(rgb) / scale)
+
+
+def soft_edge_pairs(edges):
+    """Pair weights for the right and lower differences: small if either pixel is an edge."""
+    anchor = edges[:, :-1, :-1]
+    return (
+        1 - torch.maximum(anchor, edges[:, :-1, 1:]),
+        1 - torch.maximum(anchor, edges[:, 1:, :-1]),
+    )
+
+
+def edge_aware_loss(depth, opacity, wx, wy):
+    """Edge-weighted L1 depth smoothness. A step at a colour edge costs less than a ramp."""
+    anchor = depth[..., :-1, :-1]
+    dx = anchor - depth[..., :-1, 1:]
+    dy = anchor - depth[..., 1:, :-1]
+    weight = opacity[..., :-1, :-1].detach()
+    return (weight * (wx * dx.abs() + wy * dy.abs())).mean()
+
+
 def clear_neighbor_pairs(clear):
     """Keep a depth difference only if both pixels are clear of Canny edges."""
     anchor = clear[:, :-1, :-1]
@@ -113,9 +156,14 @@ def train(
     scale=None,
     seed=None,
     stratified=True,
+    edge_loss_weight=0.0,
 ):
     if not math.isfinite(depth_weight_start) or depth_weight_start < 0:
         raise ValueError("The starting depth weight must be finite and nonnegative.")
+    if not math.isfinite(edge_loss_weight) or edge_loss_weight < 0:
+        raise ValueError("The edge loss weight must be finite and nonnegative.")
+    if edge_loss_weight and (virtual_canny or depth_weight == 0):
+        raise ValueError("The edge loss needs depth patches and cannot be used with --virtual-canny.")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     seed = SEED if seed is None else seed
     torch.manual_seed(seed)
@@ -183,6 +231,17 @@ def train(
         b = (P @ origins.unsqueeze(-1)).reshape(-1)
 
         focus = torch.linalg.lstsq(A, b).solution
+
+    if edge_loss_weight:
+        # Fixed edge scale from the training photos only. The median marks most of the
+        # textured stone as edges, so use a high quantile: only strong edges reach e ~ 1.
+        edge_scale = torch.quantile(
+            torch.cat(
+                [sobel_magnitude(images[i : i + 1].float()).flatten() for i in train_indices]
+            ),
+            EDGE_SCALE_QUANTILE,
+        ).item()
+        print(f"Edge loss weight: {edge_loss_weight:g} | Edge scale: {edge_scale:.4g}")
 
     print("Images:", images.shape)
     print("Intrinsics:", intrinsics[train_indices[0]])
@@ -276,6 +335,13 @@ def train(
             # Virtual cameras use the intrinsics of the current training view.
             patch_rays = pixel_rays(H, W, intrinsics[image_idx], patch_poses, x, y)
             clear_patches = None
+            edge_pairs = None
+            if edge_loss_weight:
+                halo_rgb = render_patch_halo(
+                    model, H, W, intrinsics[image_idx], patch_poses,
+                    x[:, :1], y[:, :1], EDGE_HALO,
+                )
+                edge_pairs = soft_edge_pairs(soft_edges(halo_rgb, edge_scale))
             if virtual_canny:
                 clear_patches = virtual_patch_clear_mask(
                     model, H, W, intrinsics[image_idx], patch_poses, x[:, :1], y[:, :1]
@@ -297,6 +363,14 @@ def train(
                     depth = depth.reshape(-1, PATCH_SIZE, PATCH_SIZE)
                     depth_loss += weight * depth_patch_loss(
                         depth, opacity.reshape_as(depth), edge_weights
+                    )
+                if edge_pairs is not None:
+                    # Fine level only.
+                    depth, opacity = levels[1]
+                    depth = depth.reshape(-1, PATCH_SIZE, PATCH_SIZE)
+                    wx, wy = (pairs[chunk] for pairs in edge_pairs)
+                    depth_loss += edge_loss_weight * edge_aware_loss(
+                        depth, opacity.reshape_as(depth), wx, wy
                     )
                 depth_loss = depth_loss * chunk_fraction
                 depth_loss.backward()
@@ -337,11 +411,11 @@ def train(
 
 
 @torch.no_grad()
-def virtual_patch_clear_mask(model, height, width, intrinsics, poses, x0, y0):
-    from canny_mask import canny
+def render_patch_halo(model, height, width, intrinsics, poses, x0, y0, halo):
+    """Render each patch plus a halo in eval mode: no noise, no jitter, no random draws.
 
-    # Render a halo so Canny sees both sides of edges at the patch boundary.
-    halo = 4
+    Returns detached RGB with shape [P, side, side, 3], side = PATCH_SIZE + 2 * halo.
+    """
     side = PATCH_SIZE + 2 * halo
     offsets = torch.arange(side * side, device=poses.device)
     x = (x0 + offsets % side - halo).clamp(0, width - 1)
@@ -353,9 +427,17 @@ def virtual_patch_clear_mask(model, height, width, intrinsics, poses, x0, y0):
         rgb = render_rays(model, [ray.flatten(0, 1) for ray in rays], RAYS_PER_CHUNK)
     finally:
         model.train(training)
-    images = (
-        (rgb.reshape(-1, side, side, 3).clamp(0, 1) * 255).round().byte().cpu().numpy()
-    )
+    return rgb.reshape(-1, side, side, 3)
+
+
+@torch.no_grad()
+def virtual_patch_clear_mask(model, height, width, intrinsics, poses, x0, y0):
+    from canny_mask import canny
+
+    # Render a halo so Canny sees both sides of edges at the patch boundary.
+    halo = 4
+    rgb = render_patch_halo(model, height, width, intrinsics, poses, x0, y0, halo)
+    images = (rgb.clamp(0, 1) * 255).round().byte().cpu().numpy()
     clear = np.stack([~canny(image)[halo:-halo, halo:-halo] for image in images])
     return torch.from_numpy(clear).to(poses.device)
 
@@ -398,6 +480,12 @@ if __name__ == "__main__":
         default=True,
         help="Jitter the coarse intervals during training (default: on). "
         "Use --no-stratified to match runs from before 2026-11-03.",
+    )
+    parser.add_argument(
+        "--edge-loss-weight",
+        type=float,
+        default=0.0,
+        help="Weight of the edge-aware L1 depth term on unseen-camera patches (default: off).",
     )
     parser.add_argument("--num-views", type=int, default=9)
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("checkpoint"))

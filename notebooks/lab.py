@@ -18,6 +18,22 @@ def solve_depth(observed, strength, weights=None):
                            (weights[:, None] * difference), observed)
 
 
+def solve_depth_l1(observed, strength, weights=None, iterations=100, eps=1e-4):
+    """Minimize sum((depth-observed)^2) + strength*sum(w*|diff(depth)|).
+
+    Iteratively reweighted least squares: each pass replaces |x| with x^2 / |x_previous|.
+    """
+    n = len(observed)
+    difference = np.diff(np.eye(n), axis=0)
+    weights = np.ones(n - 1) if weights is None else np.asarray(weights)
+    depth = np.asarray(observed, dtype=float).copy()
+    for _ in range(iterations):
+        scale = weights / np.maximum(np.abs(difference @ depth), eps)
+        depth = np.linalg.solve(np.eye(n) + 0.5 * strength * difference.T @
+                                (scale[:, None] * difference), observed)
+    return depth
+
+
 def sphere_profile():
     """Read one central foreground row. Do not smooth across invalid depth."""
     depth = np.load(ROOT / "toy_sphere/train/r_0_depth.npy")

@@ -94,11 +94,12 @@ def camera_map(poses, train_ids, test_ids, highlight):
     return board.image
 
 
-def view_grid(photo, rgb_off, rgb_on, depth_off, depth_on, depth_range, width=300):
+def view_grid(photo, rgb_off, rgb_on, depth_off, depth_on, depth_range, width=300,
+              labels=("Smoothing off", "Smoothing on")):
     """Photo and both renders on top, both depth maps below, one depth scale."""
     height = round(width * rgb_off.height / rgb_off.width)
     board = Board(16 + 3 * (width + 16), 28 + 2 * height + 34)
-    columns = [("Real photo", photo, None), ("Smoothing off", rgb_off, depth_off), ("Smoothing on", rgb_on, depth_on)]
+    columns = [("Real photo", photo, None), (labels[0], rgb_off, depth_off), (labels[1], rgb_on, depth_on)]
     for i, (title, colour, depth) in enumerate(columns):
         x = 8 + (width + 16) * i
         board.text((x, 4), title, size=TITLE)
@@ -118,8 +119,8 @@ def view_grid(photo, rgb_off, rgb_on, depth_off, depth_on, depth_range, width=30
     return board.image
 
 
-def per_view_change(views, deltas, highlight=None):
-    """Columns from a zero line: blue where smoothing helped, red where it hurt."""
+def per_view_change(views, deltas, highlight=None, change="smoothing"):
+    """Columns from a zero line: blue where the change helped, red where it hurt."""
     board = Board(760, 250)
     x0, x1, y0, y1 = 48, 750, 44, 214
     limit = max(0.5, float(np.ceil(np.abs(deltas).max() * 2) / 2))
@@ -127,8 +128,8 @@ def per_view_change(views, deltas, highlight=None):
     def level(v):
         return (y0 + y1) / 2 - v / limit * (y1 - y0) / 2
 
-    board.text((0, 4), "Change from smoothing, per test view (dB)", size=TITLE)
-    for label, colour, x in [("better with smoothing", BLUE, 430), ("worse with smoothing", RED, 590)]:
+    board.text((0, 4), f"Change from {change}, per test view (dB)", size=TITLE)
+    for label, colour, x in [(f"better with {change}", BLUE, 430), (f"worse with {change}", RED, 590)]:
         board.bar((x, 10, x + 12, 22), fill=colour, radius=2, end="top")
         board.text((x + 18, 9), label, fill=MUTED, size=SMALL)
     for tick in np.arange(-limit, limit + 1e-9, limit / 2):

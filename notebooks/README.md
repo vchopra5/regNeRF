@@ -6,13 +6,13 @@ Use the notebooks in order. Allow one hour for the team review.
 | --- | --- | --- |
 | `01_toy.py` | 15 min, plus optional training | Inspect the sphere, move a depth patch, then compare models trained with and without the patch penalty. |
 | `02_paper.py` | 25 min | Inspect scan 40 and compare with RegNeRF Table 3. |
-| `03_extension.py` | 15 min | Change the penalty at colour edges. Measure boundary and flat-surface errors. |
+| `03_extension.py` | 35 min | Compare RegNeRF with RegNeRF + an edge-aware L1 term on scan 40, after a one-line warm-up. |
 | Discussion | 5 min | State the result, its limit, and the next test. |
 
 Each notebook has a question, a prediction, evidence, and discussion prompts.
 The first notebook uses saved two-sphere results. Every saved run was trained with 5 seeds (42, 142, 242, 342, 442) and coarse jitter. The images show seed 42; the scores cover all 5 seeds. The camera and shape sections use the same three-photo baseline at 500 steps. The final experiment compares smoothing off and on at 100, 300, and 1,000 steps. Select the lower or front camera in the final section. Each view has its own reference and scores. The lower view shows the curved stripe more clearly. It was chosen after inspecting the images, so it is an additional illustration rather than an independent test.
 
-The lab uses saved results only, so nothing trains. After the lab, open the optional panel at the end of the notebook and select **Run comparison** to train your own comparison. The default is a fine depth weight of 0.05 at 300 steps. The slider covers 0 to 0.10. Positive fine weights also enable the coarse weight of 0.10; zero disables both depth terms. Submission reuses matching results or trains the requested condition and any missing baseline. New runs save checkpoints, RGB, depth, scores, and code records under `checkpoint/toy_two_spheres_student_v3`. Every custom run passes seed 42 explicitly to the trainer. Model initialization, view sampling, and RGB ray sampling reset to this seed. A separate generator uses seed 43 for depth patches. Cache reuse requires the same seed, weight, step count, and coarse jitter setting. One training run saves renders for both cameras, so changing camera reuses the same model. The third notebook solves a small depth problem.
+The lab uses saved results only, so nothing trains. After the lab, open the optional panel at the end of the notebook and select **Run comparison** to train your own comparison. The default is a fine depth weight of 0.05 at 300 steps. The slider covers 0 to 0.10. Positive fine weights also enable the coarse weight of 0.10; zero disables both depth terms. Submission reuses matching results or trains the requested condition and any missing baseline. New runs save checkpoints, RGB, depth, scores, and code records under `checkpoint/toy_two_spheres_student_v3`. Every custom run passes seed 42 explicitly to the trainer. Model initialization, view sampling, and RGB ray sampling reset to this seed. A separate generator uses seed 43 for depth patches. Cache reuse requires the same seed, weight, step count, and coarse jitter setting. One training run saves renders for both cameras, so changing camera reuses the same model. The third notebook starts with a small depth problem, then reads the saved scan 40 edge comparison.
 
 **Open these figures if you cannot run Notebook 1.**
 
@@ -91,8 +91,10 @@ Open the notebook with `env PYTHONPATH=$PWD uv run marimo run notebooks/02_paper
 Use [RegNeRF, Table 3](https://www.cvlibs.net/publications/Niemeyer2022CVPR.pdf)
 for the published reference values. The scan 40 comparison is a single-scan
 investigation with a different setup. It is not the paper benchmark aggregate.
-The extension is a controlled depth-signal experiment. It does not yet measure
-the effect of an edge penalty in a trained NeRF.
+The edge comparison in notebook 3 is one scan and one seed. DTU in this repo
+has no reference depth, so its edge metrics use the object-mask outline as a
+proxy for true depth boundaries. Prepare its results with the commands in
+section 2 of the top-level README; opening the notebook does not train.
 
 The controls follow [marimo's input API](https://docs.marimo.io/api/inputs/).
 The source code is visible in each notebook for the team to inspect.

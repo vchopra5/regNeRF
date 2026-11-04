@@ -48,18 +48,28 @@ def main():
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data/dtu/scan40")
     parser.add_argument("--scale", type=int, default=4)
     parser.add_argument("--output", type=Path, default=OUTPUT)
+    parser.add_argument("--conditions", nargs="+", metavar="NAME=CHECKPOINT",
+                        help="Render these checkpoints instead of PAIR_DIR/off and PAIR_DIR/on. "
+                             "Names appear in the file names, e.g. view1_rgb_NAME.jpg.")
     args = parser.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args.output.mkdir(parents=True, exist_ok=True)
 
     checkpoints, renders = {}, {}
-    for name in ("off", "on"):
-        checkpoints[name] = args.pair_dir / name / f"checkpoint_{args.step}.pt"
+    if args.conditions:
+        for item in args.conditions:
+            name, _, path = item.partition("=")
+            if not name or not path:
+                parser.error(f"Use NAME=CHECKPOINT, not {item!r}.")
+            checkpoints[name] = Path(path)
+    else:
+        checkpoints = {name: args.pair_dir / name / f"checkpoint_{args.step}.pt" for name in ("off", "on")}
+    for name in checkpoints:
         if torch.load(checkpoints[name], map_location="cpu", weights_only=True).get("step") != args.step:
             raise ValueError(f"Expected step {args.step}: {checkpoints[name]}")
         model = load_model(checkpoints[name], device, near=dtu.BOUNDS[0], far=dtu.BOUNDS[1])
         renders[name] = {view: render(model, args.data_dir, view, args.scale, device) for view in dtu.TEST_IDS}
-        print(f"Rendered {len(dtu.TEST_IDS)} views with depth {name}", flush=True)
+        print(f"Rendered {len(dtu.TEST_IDS)} views with {name}", flush=True)
 
     depth_ranges = {}
     for view in dtu.TEST_IDS:
