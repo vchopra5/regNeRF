@@ -25,7 +25,7 @@ def _():
     def result(text):
         return mo.callout(mo.md(text), kind="info")
 
-    return (data, json, means, mo, pair_figure, panel, pipeline_figure,
+    return (ROOT, data, json, means, mo, pair_figure, panel, pipeline_figure,
             profile_experiment, ramp_figure, result, show)
 
 
@@ -35,6 +35,20 @@ def _(mo):
     # When neighbours have different depths
     Two pixels can sit next to each other in a photo but belong to different surfaces.
     Depth smoothing pulls their predicted depths together. What happens at the edge of an object?
+
+    **How to use this page.** Work through the small experiments first. Change the controls,
+    watch the figures, and read the result boxes. Then compare the saved arch results and,
+    if you wish, render a new camera view in section 5. Nothing trains.
+
+    The saved figures, scores, and models come with the notebook. No DTU download or prior
+    training is needed. PyTorch is needed for the optional camera render.
+
+    1. Why L2 blurs a depth step
+    2. Whether colour can guide smoothing
+    3. How the new penalty works
+    4. Saved test views
+    5. Move around the arch
+    6. Scores across the test views
 
     Increase **Smoothing strength** and watch the two coloured dots move closer.
     Then clear **Smooth across the boundary**. The dots return to the true depths.
@@ -224,7 +238,7 @@ def _(data, mo, panel, result, view_choice):
 
 
 @app.cell
-def _(mo):
+def _(ROOT, json, mo):
     orbit_settings = (
         mo.md("{horizontal}\n\n{vertical}")
         .batch(
@@ -235,6 +249,29 @@ def _(mo):
         )
         .form(submit_button_label="Render view")
     )
+    _timing_path = ROOT / "notebooks/results/camera_timing.json"
+    _timing_note = mo.md("")
+    if _timing_path.is_file():
+        _timing = json.loads(_timing_path.read_text(encoding="utf-8"))
+        _rows = []
+        for _device, _label in (("cpu", "CPU"), ("cuda", "GPU")):
+            if _device in _timing["devices"]:
+                _times = _timing["devices"][_device]["median_seconds"]
+                _rows.append(f"| {_label} | {_times['first_request']:.1f} s | "
+                             f"{_times['new_angle']:.1f} s | {_times['repeat_angle']:.2f} s |")
+        _timing_note = mo.callout(mo.md(
+            "For a guide, notebook 2 measured these median times over three trials "
+            "at 100 × 75 pixels per image. Notebook 3 uses different models and also "
+            "builds depth images, so its times can differ.\n\n"
+            "| Device | First render | New angle | Repeated angle |\n"
+            "| --- | ---: | ---: | ---: |\n" + "\n".join(_rows) + "\n\n"
+            "**First render:** start and moved positions for both models. "
+            "**New angle:** the start images are reused. "
+            "**Repeated angle:** all images are reused. At zero degrees, the start "
+            "and moved positions are the same, so fewer images need rendering.\n\n"
+            f"Notebook 2 was measured on {_timing['cpu']} with {_timing['cpu_threads']} CPU threads, "
+            f"and {_timing['gpu']}. Your computer and other running tasks can change the time."
+        ), kind="neutral", title="How long does it take?")
     mo.vstack([
         mo.md("""
         ## 5. Move around the arch
@@ -249,6 +286,7 @@ def _(mo):
         Both models use the same camera and keep their learned weights. The first render loads the models;
         repeated angles reuse the images. A GPU is faster than a CPU. The elapsed time appears below each render.
         """),
+        _timing_note,
         orbit_settings,
     ])
     return (orbit_settings,)
