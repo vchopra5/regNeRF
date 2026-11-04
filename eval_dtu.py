@@ -1,6 +1,7 @@
 """Report foreground RGB PSNR for each held-out DTU view and their mean."""
 
 import argparse
+import json
 import math
 from pathlib import Path
 
@@ -61,6 +62,13 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--views", type=int, nargs="+", default=list(dtu.TEST_IDS),
                         help="DTU view IDs to score (default: the 25 test views).")
+    parser.add_argument("--output-json", type=Path, help="Save full precision scores.")
     args = parser.parse_args()
-    evaluate(args.checkpoint, args.data_dir, args.scale, args.batch_size, args.device,
-             views=tuple(args.views))
+    mean, scores = evaluate(args.checkpoint, args.data_dir, args.scale, args.batch_size,
+                            args.device, return_per_view=True, views=tuple(args.views))
+    if args.output_json:
+        args.output_json.write_text(json.dumps(dict(
+            checkpoint=str(args.checkpoint), scene=str(args.data_dir), scale=args.scale,
+            mean_foreground_psnr=mean, per_view_foreground_psnr=scores,
+            aggregation=f"Arithmetic mean of {len(scores)} per-view foreground RGB PSNR values",
+        ), indent=2, allow_nan=False), encoding="utf-8")

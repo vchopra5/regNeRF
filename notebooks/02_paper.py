@@ -12,15 +12,15 @@ def _():
     import numpy as np
     from PIL import Image
 
-    import dtu
+    from notebooks import scan40_assets as dtu
     from notebooks.lab import PAPER, ROOT
     from notebooks.scan40_figures import camera_map, per_view_change, small, table3_chart, view_grid
     from notebooks.toy_figures import SCALE
 
     results = ROOT / "notebooks" / "results"
     images = results / "scan40"
-    scene = ROOT / "data" / "dtu" / "scan40"
-    downloaded = (scene / "cameras.npz").is_file() and (scene / "image").is_dir()
+    scene = dtu.SCENE
+    downloaded = (scene / "cameras.json").is_file() and (scene / "image").is_dir()
 
     def show(image, caption=None):
         """Show a figure at its display size. Figures are drawn at SCALE times that size."""
@@ -38,8 +38,8 @@ def _():
 
     def no_photos():
         return mo.callout(
-            mo.md("**The DTU photos are not downloaded yet.** They are not in Git. Run this once "
-                  "(about 120 MB, under a minute):\n\n```sh\nuv run python prepare_dtu.py --download\n```"),
+            mo.md("**The saved reference images are missing.** Restore "
+                  "`notebooks/results/scan40_reference` from the complete repository. No training is needed."),
             kind="warn",
         )
 
@@ -81,12 +81,19 @@ def _(PAPER, downloaded, mo, scene, small):
         **Prediction.** If notebook 1 transfers, smoothing should improve the colour seen from new
         cameras. This can fail: colour PSNR does not measure the shape directly.
 
-        **How to use this page.** Everything uses saved results, so nothing trains. Read each section,
-        then the box beside it. Allow about 25 minutes.
+        **How to use this page.** Compare the saved results, then render a moved camera from the saved
+        models in section 3a. Nothing trains. Read each section, then the box beside it.
+        Allow about 25 minutes.
+
+        Small reference photos, camera data, model renders, and scores come with the notebook.
+        No DTU download or prior training is needed. The reference previews are reduced for display;
+        the saved PSNR values still use the original evaluation protocol.
+        PyTorch is needed only if you choose the optional moved-camera render.
 
         1. What the paper reports
         2. The cameras and the three training photos
         3. New cameras
+           - Move the camera and render a new image
         4. The score over 25 new cameras
         """
     )
@@ -158,7 +165,7 @@ def _(camera_map, downloaded, dtu, mo, no_photos, result, scene, show, small):
             [
                 mo.hstack(
                     [
-                        show(camera_map(dtu.load_rig_poses(scene).numpy(), _train, dtu.TEST_IDS, 45)),
+                        show(camera_map(dtu.load_rig_poses(scene), _train, dtu.TEST_IDS, 45)),
                         result(
                             "Each dot is one camera of the DTU rig, placed by the direction it looks from. "
                             "The 3 **training** cameras sit in a single row, near the middle height. The "
@@ -257,6 +264,108 @@ def _(Image, downloaded, images, json, missing, mo, no_photos, result, scene, sh
 
 
 @app.cell
+def _(json, mo, results):
+    camera_settings = (
+        mo.md("{angle}")
+        .batch(angle=mo.ui.slider(start=0, stop=20, step=2, value=10, show_value=True,
+                                  label="Camera turn (degrees)", full_width=True))
+        .form(submit_button_label="Render view")
+    )
+    _timing_path = results / "camera_timing.json"
+    _timing_note = mo.md("")
+    if _timing_path.is_file():
+        _timing = json.loads(_timing_path.read_text())
+        _rows = []
+        for _device, _label in (("cpu", "CPU"), ("cuda", "GPU")):
+            if _device in _timing["devices"]:
+                _times = _timing["devices"][_device]["median_seconds"]
+                _rows.append(f"| {_label} | {_times['first_request']:.1f} s | "
+                             f"{_times['new_angle']:.1f} s | {_times['repeat_angle']:.2f} s |")
+        _timing_note = mo.callout(mo.md(
+            "Median times from three trials at 100 × 75 pixels per image.\n\n"
+            "| Device | First render | New angle | Repeated angle |\n"
+            "| --- | ---: | ---: | ---: |\n" + "\n".join(_rows) + "\n\n"
+            "**First render:** both models at the start and moved positions (four images). "
+            "**New angle:** two new images; the start images are reused. "
+            "**Repeated angle:** all images are reused from memory.\n\n"
+            f"Measured on {_timing['cpu']} with {_timing['cpu_threads']} CPU threads, "
+            f"and {_timing['gpu']}. Includes model loading and figure assembly. "
+            "Excludes notebook startup and browser display. Your computer and other running tasks "
+            "can change these times."
+        ), kind="neutral", title="How long does it take?")
+    mo.vstack([
+        mo.md("""
+        ---
+        ## 3a. What changes when you move the camera?
+        Start at training camera 25. Turn the camera around the arch, away from the training row.
+        Both models use the same camera. Their weights stay fixed.
+
+        **Predict.** Which model will keep the arch opening and pillar edges more stable?
+        **Change** the turn to 0, 10, then 20 degrees. Select **Render view** after each change.
+        **Watch** the opening and both pillars. The top row stays at the start position.
+        The bottom row shows your new view.
+
+        The page computes new 100 × 75 images from the saved models. It does not train.
+        It uses the GPU when available. Repeated settings reuse the render.
+        **Same model pair.** This activity uses the shared models from `scan40_pair_new` at step 20,000,
+        the pair used for the saved images and scores in sections 3 and 4. The model files come with
+        the notebook. The page checks their file hashes before rendering.
+        """),
+        _timing_note,
+        camera_settings,
+    ])
+    return (camera_settings,)
+
+
+@app.cell
+def _(camera_settings, downloaded, mo, no_photos, result, scene, show):
+    if camera_settings.value is None:
+        _body = result("Select a camera turn, then select **Render view**. No render starts when you open the page.",
+                       kind="neutral", title="Try it")
+    elif not downloaded:
+        _body = no_photos()
+    else:
+        try:
+            from notebooks.live_camera import render_comparison
+            with mo.status.spinner(title="Rendering both saved models. No training."):
+                _figure, _device, _step = render_comparison(scene, camera_settings.value["angle"])
+            _body = mo.hstack([
+                show(_figure, caption=f"Scored pair: scan40_pair_new, step {_step}. "
+                     f"Rendered on {_device} at 100 × 75 pixels; enlarged for display."),
+                result(
+                    "The model has already learned a 3D scene. **Moving the camera asks it to draw that "
+                    "scene from a different position.** It does not learn anything new.\n\n"
+                    "Read the images like this:\n\n"
+                    "- **Left column:** Model trained without depth smoothing.\n"
+                    "- **Right column:** Model trained with depth smoothing.\n"
+                    "- **Top row:** Original camera position.\n"
+                    "- **Bottom row:** Camera position you selected.\n\n"
+                    "At **0°**, the camera has not moved. Each bottom image should match the image above it.\n\n"
+                    "At **10° or 20°**, you see the arch from a new angle. Look for mistakes that become "
+                    "visible: a pillar may look broken, or a false surface may block the opening. "
+                    "“False structure” means a surface the model predicts that should not be there.\n\n"
+                    "The question is: **Which model keeps a more plausible arch as the camera moves?** "
+                    "Smoothing may help, but you must check the images.\n\n"
+                    "We have no real photo from these exact new positions. Thus, we can inspect visible "
+                    "problems, but cannot calculate an accurate comparison with a reference photo. "
+                    "The existing PSNR scores still come from the original 25 test photos.",
+                    kind="neutral",
+                ),
+            ], widths=[2, 1], align="center", gap=1, wrap=True)
+        except (FileNotFoundError, ValueError, ImportError) as _error:
+            _body = result(
+                f"**The live render is not ready.**\n\n```text\n{_error}\n```\n\n"
+                "This activity needs `notebooks/models/scan40_off.pt`, "
+                "`notebooks/models/scan40_regnerf.pt`, and their `manifest.json`. "
+                "PyTorch is needed only for this optional render. Install it to use the shared models. "
+                "The saved comparisons in sections 3 and 4 still work without it. No training is needed.",
+                kind="warn", title="Saved models needed",
+            )
+    _body
+    return
+
+
+@app.cell
 def _(dtu, json, missing, mo, np, per_view_change, result, results, show, stat, view_choice):
     _file = results / "scan40.json"
     if _file.is_file():
@@ -344,6 +453,7 @@ def _(mo):
                 - Which test views changed most in section 4? Where are they in the camera map? Open them
                   in section 3: what does the smoothing-off model put in front of the camera?
                 - What evidence would you need to claim that the *shape* improved?
+                - In section 3a, what changed when you moved the camera? Which visible structures stayed stable?
 
                 **Next.** Smoothing helps inside a surface, but a real depth edge should stay sharp. Notebook 3
                 tests a penalty that relaxes at image edges.

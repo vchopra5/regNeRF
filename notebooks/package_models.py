@@ -45,6 +45,7 @@ def package(name, checkpoint):
         raise ValueError(f"Saved weights differ from {checkpoint}")
     record_path, record = training_record(checkpoint)
     return target, dict(file=target.name, source=relative(checkpoint), step=step,
+                        source_checkpoint_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
                         sha256=hashlib.sha256(target.read_bytes()).hexdigest(), bytes=target.stat().st_size,
                         packaged_utc=datetime.now(timezone.utc).isoformat(),
                         packaged_revision=git("rev-parse", "HEAD"),

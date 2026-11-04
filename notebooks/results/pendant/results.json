@@ -1,0 +1,170 @@
+{
+  "summary": {
+    "means": {
+      "regnerf": {
+        "boundary_depth_rmse": 0.6056985310519981,
+        "flat_depth_rmse": 0.33502319123731933,
+        "foreground_psnr": 20.099953428761694
+      },
+      "partner": {
+        "boundary_depth_rmse": 0.5052801722339612,
+        "flat_depth_rmse": 0.17761496507955635,
+        "foreground_psnr": 19.648094549997307
+      }
+    },
+    "partner_minus_regnerf": {
+      "boundary_depth_rmse": -0.10041835881803696,
+      "flat_depth_rmse": -0.15740822615776298,
+      "foreground_psnr": -0.45185887876438713
+    },
+    "aggregation": "Arithmetic mean of three per-view scores"
+  },
+  "per_view": [
+    {
+      "view": [
+        15,
+        5
+      ],
+      "mode": "regnerf",
+      "foreground_psnr": 20.928280346245423,
+      "boundary_depth_rmse": 0.6102563180755086,
+      "boundary_depth_mae": 0.41745270167402226,
+      "flat_depth_rmse": 0.33790648750092633,
+      "flat_depth_mae": 0.28764204937793786
+    },
+    {
+      "view": [
+        15,
+        5
+      ],
+      "mode": "partner",
+      "foreground_psnr": 20.315485514203644,
+      "boundary_depth_rmse": 0.5082183565033696,
+      "boundary_depth_mae": 0.3387775260366357,
+      "flat_depth_rmse": 0.17803023903474952,
+      "flat_depth_mae": 0.17504005483844182
+    },
+    {
+      "view": [
+        -15,
+        5
+      ],
+      "mode": "regnerf",
+      "foreground_psnr": 20.270009595151354,
+      "boundary_depth_rmse": 0.6069542696521212,
+      "boundary_depth_mae": 0.41562086817671884,
+      "flat_depth_rmse": 0.3376395842759766,
+      "flat_depth_mae": 0.28543807987152386
+    },
+    {
+      "view": [
+        -15,
+        5
+      ],
+      "mode": "partner",
+      "foreground_psnr": 19.92069917381047,
+      "boundary_depth_rmse": 0.504879740068056,
+      "boundary_depth_mae": 0.33612710637714843,
+      "flat_depth_rmse": 0.1783177094556976,
+      "flat_depth_mae": 0.17436395793763954
+    },
+    {
+      "view": [
+        0,
+        15
+      ],
+      "mode": "regnerf",
+      "foreground_psnr": 19.1015703448883,
+      "boundary_depth_rmse": 0.5998850054283644,
+      "boundary_depth_mae": 0.4156767471587643,
+      "flat_depth_rmse": 0.3295235019350549,
+      "flat_depth_mae": 0.28112160787655655
+    },
+    {
+      "view": [
+        0,
+        15
+      ],
+      "mode": "partner",
+      "foreground_psnr": 18.708098961977807,
+      "boundary_depth_rmse": 0.5027424201304578,
+      "boundary_depth_mae": 0.3387128643183236,
+      "flat_depth_rmse": 0.17649694674822197,
+      "flat_depth_mae": 0.17351740091639467
+    }
+  ],
+  "views": [
+    [
+      15,
+      5
+    ],
+    [
+      -15,
+      5
+    ],
+    [
+      0,
+      15
+    ]
+  ],
+  "settings": {
+    "seed": 42,
+    "steps": 8000,
+    "train_views": [
+      25,
+      22,
+      28
+    ],
+    "scale": 1,
+    "eval_scale": 1,
+    "stratified": true,
+    "coarse_depth_weight": 0.1,
+    "fine_depth_weight": 0.1,
+    "initial_depth_weight": 0.1,
+    "edge_loss_weight": 0.1,
+    "edge_scale_quantile": 0.9,
+    "edge_halo": 2,
+    "weight_selection": "Repository example; fixed before training; no tuning",
+    "device": "NVIDIA GeForce RTX 5090",
+    "adaptation": "Move loaded training images to CUDA for edge-scale calculation; loss code unchanged"
+  },
+  "checkpoints": {
+    "regnerf": "checkpoint\\canny_l1_pendant_8k_20261103\\regnerf\\step_8000.pt",
+    "partner": "checkpoint\\partner_pendant_8k_20261103_run2\\partner\\step_8000.pt"
+  },
+  "partner_revision": "92d882b6f5106c78fccb2c67691b6eb80652a358",
+  "source_sha256": {
+    "train.py": "78a10c06ec2cb913d9ef90697a5fae8d6f5a007f106ed928a40dbe7b7813ce60",
+    "model.py": "8c208b97ef365b4986b16e42309e8e76130ff9ee11b0787c0262a8e257d699a8",
+    "data.py": "b8807afd8dc26f6d2289c6ea1f8cd09508c46b9c5864eeb3fc3d424835d4543c",
+    "dtu.py": "9b1a5576381cc4d13641fa3ca98e95c0f4c703aea44c52e0482a308dc9fc4762",
+    "generate_sphere.py": "afdec45c08af071a97c6d40eb5f3c2409eaa2cc2e651a36fb9bb7c9f3bd62009",
+    "provenance.py": "7fa1e0005fe1423f846e38265dbde1863ff7398bcd69d37687ad29bc80c40a16",
+    "eval_dtu.py": "c289a24b8fdba11e4e236b1e7a33688e0ee0eb23027f4118f70a138e35bfecfc",
+    "eval_edges.py": "853f6b9a5b76a42a72679522214a494d5f06ff831c2140925729f8b36494a903"
+  },
+  "input_sha256": {
+    "checkpoint\\ginkgo_20261102_162816\\transforms_train.json": "fef5decf23fc3ffbb27aabf5ff84db71a34d8c8b38219967d6c950f752e3f9d2",
+    "checkpoint\\ginkgo_20261102_162816\\design.py": "b25151bca7af1b7ef5d9ce3b28c6450b5ca4d196c930eeede4ed278a4e740931",
+    "checkpoint\\ginkgo_20261102_162816\\r0.png": "8194007ea2284e6aae5ad1ada46cbfdcbb82d0ad677bbf6dd6d5873d1d375145",
+    "checkpoint\\ginkgo_20261102_162816\\r1.png": "f8df09a1af0aed11d2b640dce9a3f24759b3de3efc7112ce963d488c2d89218c",
+    "checkpoint\\ginkgo_20261102_162816\\r2.png": "5b2697e7e2134fbea7cd5aa6e9b6076e904806ea07c276bf69efad5d07e7131e"
+  },
+  "baseline_source_sha256": {
+    "train.py": "bc45cca61d5bc4f992724bf721b48d07b2785e4a59c07b75595e41736ed5c367",
+    "model.py": "d61f796ee3a99d455781cd3f09a751c87430d546847d14c09ba672b1f81b15e5",
+    "data.py": "1cfa5a86bc3232f131cd08de459dbb858cdc2e83a19381c9d7fc8c7a86965d9f",
+    "dtu.py": "9b1a5576381cc4d13641fa3ca98e95c0f4c703aea44c52e0482a308dc9fc4762",
+    "generate_sphere.py": "29361fae840e4a31686d0254ce2bdef19e2acdaed7f236d8e7f06d3a1009f45d",
+    "canny_regularizer.py": "c88223a2eeef33a81235c9b43556ec03658904f6081456ba1521030f9b295e59",
+    "compare_canny_weights.py": "744996aa4ea06d6b3645389047dcacc7aac0c1a42447d1001e69007fa21b57e9",
+    "provenance.py": "af3f11088f1d4752b5168c965e5f2eec33b650cf113817460523f377260af9cf"
+  },
+  "selection": "Three fixed views used in earlier pendant studies. One scene and one seed.",
+  "boundary": "Two-pixel band on each side of pendant/chain silhouette; finite truth only",
+  "flat": "Back panel; exclude seven pixels around all non-panel pixels",
+  "source_records": [
+    "checkpoint\\canny_l1_pendant_8k_20261103\\record.json",
+    "checkpoint\\partner_pendant_8k_20261103_run2\\record.json"
+  ]
+}

@@ -6,13 +6,13 @@ Use the notebooks in order. Allow one hour for the team review.
 | --- | --- | --- |
 | `01_toy.py` | 15 min, plus optional training | Inspect the sphere, move a depth patch, then compare models trained with and without the patch penalty. |
 | `02_paper.py` | 25 min | Inspect scan 40 and compare with RegNeRF Table 3. |
-| `03_extension.py` | 35 min | Compare RegNeRF with RegNeRF + an edge-aware L1 term on scan 40, after a one-line warm-up. |
+| `03_extension.py` | 30 min | Explore the edge L1 penalty, compare all 25 stone-arch views, then turn the camera around both models. |
 | Discussion | 5 min | State the result, its limit, and the next test. |
 
 Each notebook has a question, a prediction, evidence, and discussion prompts.
 The first notebook uses saved two-sphere results. Every saved run was trained with 5 seeds (42, 142, 242, 342, 442) and coarse jitter. The images show seed 42; the scores cover all 5 seeds. The camera and shape sections use the same three-photo baseline at 500 steps. The final experiment compares smoothing off and on at 100, 300, and 1,000 steps. Select the lower or front camera in the final section. Each view has its own reference and scores. The lower view shows the curved stripe more clearly. It was chosen after inspecting the images, so it is an additional illustration rather than an independent test.
 
-The lab uses saved results only, so nothing trains. After the lab, open the optional panel at the end of the notebook and select **Run comparison** to train your own comparison. The default is a fine depth weight of 0.05 at 300 steps. The slider covers 0 to 0.10. Positive fine weights also enable the coarse weight of 0.10; zero disables both depth terms. Submission reuses matching results or trains the requested condition and any missing baseline. New runs save checkpoints, RGB, depth, scores, and code records under `checkpoint/toy_two_spheres_student_v3`. Every custom run passes seed 42 explicitly to the trainer. Model initialization, view sampling, and RGB ray sampling reset to this seed. A separate generator uses seed 43 for depth patches. Cache reuse requires the same seed, weight, step count, and coarse jitter setting. One training run saves renders for both cameras, so changing camera reuses the same model. The third notebook starts with a small depth problem, then reads the saved scan 40 edge comparison.
+The lab uses saved results only, so nothing trains. After the lab, open the optional panel at the end of the notebook and select **Run comparison** to train your own comparison. The default is a fine depth weight of 0.05 at 300 steps. The slider covers 0 to 0.10. Positive fine weights also enable the coarse weight of 0.10; zero disables both depth terms. Submission reuses matching results or trains the requested condition and any missing baseline. New runs save checkpoints, RGB, depth, scores, and code records under `checkpoint/toy_two_spheres_student_v3`. Every custom run passes seed 42 explicitly to the trainer. Model initialization, view sampling, and RGB ray sampling reset to this seed. A separate generator uses seed 43 for depth patches. Cache reuse requires the same seed, weight, step count, and coarse jitter setting. One training run saves renders for both cameras, so changing camera reuses the same model. The third notebook starts with a small depth problem, then reads the saved stone-arch comparison for RegNeRF and RegNeRF + edge L1.
 
 **Open these figures if you cannot run Notebook 1.**
 
@@ -25,6 +25,22 @@ The lab uses saved results only, so nothing trains. After the lab, open the opti
 The paper notebook reads saved images and an evaluation record. It shows a clear
 missing-result message until that record exists. Opening a notebook does not start training.
 
+Notebook 2, section 3a, also renders a moved camera. Change the turn from 0 to 10 to 20 degrees,
+then select **Render view**. Compare the arch opening and pillar edges with the fixed start view.
+Both models use the same camera and keep their saved weights. The panel renders at 100 × 75 pixels
+on the GPU when available. Repeated settings reuse the small images. A CPU takes longer.
+The panel uses `notebooks/models/scan40_off.pt` and `scan40_regnerf.pt`, included with the notebook.
+It checks their hashes against `models/manifest.json` and checks their source and step against
+the score record. These are the shared weights from `scan40_pair_new`, the pair used for the
+saved images and scores in sections 3 and 4.
+The saved comparisons still work without checkpoints. The moved views have no reference photo,
+so this activity does not report PSNR or change the official 25-view result.
+
+Section 3a shows measured CPU and GPU render times from `results/camera_timing.json`.
+Run `python -m notebooks.benchmark_camera` to measure them again on this computer.
+The script runs three trials per device. It measures the first render, a new angle,
+and a repeated angle separately. It does not train. It replaces the saved timing record.
+
 ## Open the notebooks
 
 The camera-motion slider redraws the stripe and camera diagram from cached depth arrays in under one second per change.
@@ -33,20 +49,43 @@ Use Python 3.10 or later. Run these commands from the repository root in a Pytho
 
 ```sh
 python -m pip install -r requirements-notebooks.txt
-python -m notebooks.open_toy
+python -m notebooks.open_notebook --notebook 1
+python -m notebooks.open_notebook --notebook 2
+python -m notebooks.open_notebook --notebook 3
 ```
 
-The launcher sets the project import path. It uses the Python environment in which you run it. Add `--view` to open the reading view. The editor keeps the code editable.
+The launcher sets the project import path. It uses the Python environment in which you run it. The launcher opens the interactive reading view by default. Add `--edit` to open the code editor.
 
-The saved lesson needs marimo, NumPy, and Pillow. Install PyTorch in the same environment only if you want to use optional training:
+The notebook environment requires PyTorch, marimo, NumPy, and Pillow.
+The requirements command above installs all four packages. The lessons open without prior
+training, downloaded DTU data, or local experiment checkpoints. Check CUDA availability:
 
 ```sh
-python -m pip install torch
+python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 ```
 
 The trainer uses CUDA when a compatible GPU and PyTorch installation are available. Otherwise, it uses the CPU. For 300 steps, allow about 16 minutes per model with four CPU threads. This is an estimate from a short timing test.
 
-Open the other notebooks with `python -m marimo edit notebooks/02_paper.py` or `python -m marimo edit notebooks/03_extension.py`, with the repository root on `PYTHONPATH`. Their requirements are separate from the toy lesson. Notebook 2 also needs PyTorch, because it reads the cameras through `dtu.py`; the CPU build is enough. The photo download needs `huggingface_hub`. `uv sync` installs both. With pip, run `python -m pip install torch huggingface_hub`.
+The launcher accepts `--notebook 1`, `--notebook 2`, or `--notebook 3` and sets the project
+import path. Direct marimo commands also work with the repository root on `PYTHONPATH`.
+Notebook 2 includes 28 small reference photos, the camera data, all 25 saved model comparisons,
+and the scored model weights. Its live render uses the bundled camera data and models.
+Install all required packages before you use the moved-camera panel.
+Notebook 3 includes 50 stone-arch panels and the 25-view score record for both models.
+Its camera panel turns horizontally from −180° to 180° and vertically from −90° to 90°.
+Select **Render view** to draw both models from the same position. Colour and depth tabs
+show the fixed start above the new view. Repeated angles reuse the images.
+The panel uses `scan40_extension_regnerf.pt` and `scan40_edge_l1.pt` in `notebooks/models/`.
+It checks their hashes and source checkpoints against the Notebook 3 scores.
+These are a different model pair from Notebook 2. The camera files and weights are included;
+no DTU download is needed. Each render reports its elapsed time. New angles have no reference
+photo, so they do not receive a PSNR score. The small depth experiments and saved-view controls
+do not render or train. The camera panel renders only after you select the button.
+
+Run `python -m notebooks.verify_saved_notebooks` to test a fresh copy. The check excludes
+downloaded data, local training outputs, and unpacked toy assets. It blocks PyTorch and trainer
+imports, opens all three notebooks, and checks the saved cameras. It also checks the L1/L2,
+strength, guide, neighbour-link, and ramp controls in Notebook 3.
 
 ## Files included for the toy lesson
 
@@ -71,7 +110,9 @@ To measure this on another CPU, run `python -m notebooks.benchmark_toy_cpu --ste
 
 ## Prepare the paper evidence
 
-Notebook 2 reads the model results from `notebooks/results/`, which is in Git, and the DTU photos from `data/dtu/scan40`, which is not. **Before the lab, each student runs `uv sync`, then `uv run python prepare_dtu.py --download`** (about 120 MB, under a minute, no account needed). `uv sync` installs PyTorch; allow time for that download too. The checkpoints are not needed.
+Notebook 2 reads the saved results and small reference photos from `notebooks/results/`.
+Students do not need to download DTU or run training. The commands below are for
+maintainers who need to replace the saved evidence.
 
 Prepare the results once, before the lab:
 
@@ -91,10 +132,15 @@ Open the notebook with `env PYTHONPATH=$PWD uv run marimo run notebooks/02_paper
 Use [RegNeRF, Table 3](https://www.cvlibs.net/publications/Niemeyer2022CVPR.pdf)
 for the published reference values. The scan 40 comparison is a single-scan
 investigation with a different setup. It is not the paper benchmark aggregate.
-The edge comparison in notebook 3 is one scan and one seed. DTU in this repo
-has no reference depth, so its edge metrics use the object-mask outline as a
-proxy for true depth boundaries. Prepare its results with the commands in
-section 2 of the top-level README; opening the notebook does not train.
+Notebook 3 compares RegNeRF + edge L1 with RegNeRF on DTU scan 40.
+Both models use 20,000 steps and seed 42. Mean foreground RGB PSNR increases
+from 18.37 to 18.76 dB: a difference of +0.38 dB. RegNeRF + edge L1 scores higher in
+20 of 25 test views. No reference depth is available, so the lesson does not
+report depth error for this scan. All depth displays share one scale and use no foreground mask.
+The lesson starts with small visual experiments, then shows the saved stone results.
+It reads `results/partner_stone/results.json` and 50 PNG panels. Opening it needs
+no local training checkpoints or DTU download. Use `python -m notebooks.package_partner_stone`
+to rebuild this bundle from saved local results. This does not train or render a model.
 
 The controls follow [marimo's input API](https://docs.marimo.io/api/inputs/).
 The source code is visible in each notebook for the team to inspect.

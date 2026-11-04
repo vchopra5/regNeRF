@@ -153,11 +153,22 @@ def train(
     use_all_synthetic_poses=False,
     depth_weight_start=DEPTH_WEIGHT_START,
     virtual_canny=False,
+    virtual_edge_weight=False,
     scale=None,
     seed=None,
     stratified=True,
     edge_loss_weight=0.0,
+    virtual_canny_weight=False,
+    virtual_canny_l1=False,
+    edge_depth_margin=0.1,
+    require_cuda=False,
 ):
+    if sum((virtual_canny, virtual_edge_weight, virtual_canny_weight, virtual_canny_l1)) > 1:
+        raise ValueError("Select one edge rule.")
+    if require_cuda and not torch.cuda.is_available():
+        raise RuntimeError("CUDA is required for this run. CPU training is disabled.")
+    if not math.isfinite(edge_depth_margin) or edge_depth_margin <= 0:
+        raise ValueError("The edge depth margin must be finite and positive.")
     if not math.isfinite(depth_weight_start) or depth_weight_start < 0:
         raise ValueError("The starting depth weight must be finite and nonnegative.")
     if not math.isfinite(edge_loss_weight) or edge_loss_weight < 0:
@@ -346,6 +357,32 @@ def train(
                 clear_patches = virtual_patch_clear_mask(
                     model, H, W, intrinsics[image_idx], patch_poses, x[:, :1], y[:, :1]
                 )
+            soft_weights = None
+            if virtual_canny_weight or virtual_canny_l1:
+                from canny_regularizer import HALO, canny_depth_weights
+
+                guide = render_patch_halo(
+                    model, H, W, intrinsics[image_idx], patch_poses,
+                    x[:, :1], y[:, :1], HALO,
+                )
+                soft_weights = canny_depth_weights(guide)
+            if virtual_edge_weight:
+                with torch.no_grad():
+                    model.eval()
+                    try:
+                        guide = render_rays(
+                            model,
+                            [ray.flatten(0, 1) for ray in patch_rays],
+                            RAYS_PER_CHUNK,
+                        ).reshape(-1, PATCH_SIZE, PATCH_SIZE, 3)
+                    finally:
+                        model.train()
+                    # Extend the notebook's scalar difference to mean absolute RGB difference.
+                    anchor = guide[:, :-1, :-1]
+                    soft_weights = tuple(
+                        torch.exp(-10 * (anchor - neighbor).abs().mean(-1))
+                        for neighbor in (guide[:, :-1, 1:], guide[:, 1:, :-1])
+                    )
 
             patches_per_chunk = RAYS_PER_CHUNK // patch_area
             for start in range(0, patch_count, patches_per_chunk):
@@ -357,13 +394,22 @@ def train(
                     if clear_patches is None
                     else clear_neighbor_pairs(clear_patches[chunk])
                 )
+                if soft_weights is not None:
+                    edge_weights = tuple(weight[chunk] for weight in soft_weights)
                 chunk_fraction = rays[0].shape[0] / DEPTH_RAYS
                 depth_loss = loss.new_zeros(())
                 for (depth, opacity), weight in zip(levels, (0.1, current_weight)):
                     depth = depth.reshape(-1, PATCH_SIZE, PATCH_SIZE)
-                    depth_loss += weight * depth_patch_loss(
+                    patch_loss = depth_patch_loss(
                         depth, opacity.reshape_as(depth), edge_weights
                     )
+                    if virtual_canny_l1:
+                        from canny_regularizer import canny_edge_l1_loss
+
+                        patch_loss = patch_loss + canny_edge_l1_loss(
+                            depth, opacity.reshape_as(depth), edge_weights, edge_depth_margin
+                        )
+                    depth_loss += weight * patch_loss
                 if edge_pairs is not None:
                     # Fine level only.
                     depth, opacity = levels[1]
@@ -431,6 +477,12 @@ def render_patch_halo(model, height, width, intrinsics, poses, x0, y0, halo):
 
 
 @torch.no_grad()
+def virtual_patch_rgb(model, height, width, intrinsics, poses, x0, y0, halo):
+    """Keep the colour-guide interface used by the local Canny experiments."""
+    return render_patch_halo(model, height, width, intrinsics, poses, x0, y0, halo).clamp(0, 1)
+
+
+@torch.no_grad()
 def virtual_patch_clear_mask(model, height, width, intrinsics, poses, x0, y0):
     from canny_mask import canny
 
@@ -474,6 +526,26 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip depth comparisons at Canny edges in rendered unseen-camera patches.",
     )
+    parser.add_argument(
+        "--virtual-edge-weight",
+        action="store_true",
+        help="Use exp(-10 * mean absolute RGB difference) on depth pairs. "
+        "Use detached rendered RGB from unseen-camera patches.",
+    )
+    parser.add_argument(
+        "--virtual-canny-weight",
+        action="store_true",
+        help="Use blurred colour gradients to weight depth pairs. "
+        "Keep a small depth penalty at edges.",
+    )
+    parser.add_argument(
+        "--virtual-canny-l1",
+        action="store_true",
+        help="Add an L1 shortfall penalty for missing depth changes at colour edges.",
+    )
+    parser.add_argument("--edge-depth-margin", type=float, default=0.1)
+    parser.add_argument("--require-cuda", action="store_true",
+                        help="Fail if CUDA is unavailable. Do not train on CPU.")
     parser.add_argument(
         "--stratified",
         action=argparse.BooleanOptionalAction,

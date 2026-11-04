@@ -1,0 +1,300 @@
+{
+  "means_db": {
+    "regnerf": 18.37119237206166,
+    "partner": 18.75502491792151
+  },
+  "difference_db": 0.3838325458598497,
+  "per_view": [
+    {
+      "view": 1,
+      "regnerf_db": 15.109668503530374,
+      "partner_db": 15.583876342607361,
+      "partner_minus_regnerf_db": 0.47420783907698727
+    },
+    {
+      "view": 2,
+      "regnerf_db": 15.841634862705858,
+      "partner_db": 15.483715967609296,
+      "partner_minus_regnerf_db": -0.35791889509656194
+    },
+    {
+      "view": 9,
+      "regnerf_db": 16.698476793658806,
+      "partner_db": 17.284148493266052,
+      "partner_minus_regnerf_db": 0.5856716996072464
+    },
+    {
+      "view": 10,
+      "regnerf_db": 16.651303809013612,
+      "partner_db": 15.926400885150562,
+      "partner_minus_regnerf_db": -0.7249029238630502
+    },
+    {
+      "view": 11,
+      "regnerf_db": 15.420128271764554,
+      "partner_db": 16.43141967628894,
+      "partner_minus_regnerf_db": 1.0112914045243855
+    },
+    {
+      "view": 12,
+      "regnerf_db": 17.173378268042768,
+      "partner_db": 17.57872485775985,
+      "partner_minus_regnerf_db": 0.40534658971708026
+    },
+    {
+      "view": 14,
+      "regnerf_db": 18.83369290445946,
+      "partner_db": 19.4397833099022,
+      "partner_minus_regnerf_db": 0.606090405442739
+    },
+    {
+      "view": 15,
+      "regnerf_db": 17.710612786525907,
+      "partner_db": 18.528620205472624,
+      "partner_minus_regnerf_db": 0.818007418946717
+    },
+    {
+      "view": 23,
+      "regnerf_db": 21.428238080353363,
+      "partner_db": 21.75573120003375,
+      "partner_minus_regnerf_db": 0.32749311968038697
+    },
+    {
+      "view": 24,
+      "regnerf_db": 21.430404214419422,
+      "partner_db": 22.082294275625493,
+      "partner_minus_regnerf_db": 0.6518900612060712
+    },
+    {
+      "view": 26,
+      "regnerf_db": 17.744222898922487,
+      "partner_db": 17.74219605630791,
+      "partner_minus_regnerf_db": -0.0020268426145761964
+    },
+    {
+      "view": 27,
+      "regnerf_db": 18.859108712382632,
+      "partner_db": 18.904957116284947,
+      "partner_minus_regnerf_db": 0.04584840390231548
+    },
+    {
+      "view": 29,
+      "regnerf_db": 20.853041481615126,
+      "partner_db": 20.731424336306695,
+      "partner_minus_regnerf_db": -0.12161714530843071
+    },
+    {
+      "view": 30,
+      "regnerf_db": 17.373200592896193,
+      "partner_db": 17.395762592085376,
+      "partner_minus_regnerf_db": 0.022561999189182558
+    },
+    {
+      "view": 31,
+      "regnerf_db": 19.80297089794724,
+      "partner_db": 20.166284142825887,
+      "partner_minus_regnerf_db": 0.3633132448786469
+    },
+    {
+      "view": 32,
+      "regnerf_db": 21.307565691599073,
+      "partner_db": 21.823562836358906,
+      "partner_minus_regnerf_db": 0.515997144759833
+    },
+    {
+      "view": 33,
+      "regnerf_db": 20.890621125093656,
+      "partner_db": 21.18865763922375,
+      "partner_minus_regnerf_db": 0.2980365141300929
+    },
+    {
+      "view": 34,
+      "regnerf_db": 21.218733170856762,
+      "partner_db": 21.55544912713086,
+      "partner_minus_regnerf_db": 0.336715956274098
+    },
+    {
+      "view": 35,
+      "regnerf_db": 15.79191392479933,
+      "partner_db": 16.402177739996272,
+      "partner_minus_regnerf_db": 0.6102638151969426
+    },
+    {
+      "view": 41,
+      "regnerf_db": 15.59280728048353,
+      "partner_db": 15.92047516642545,
+      "partner_minus_regnerf_db": 0.32766788594191887
+    },
+    {
+      "view": 42,
+      "regnerf_db": 19.540246515618477,
+      "partner_db": 20.11005152653308,
+      "partner_minus_regnerf_db": 0.5698050109146031
+    },
+    {
+      "view": 43,
+      "regnerf_db": 19.674056307097445,
+      "partner_db": 20.47380087366951,
+      "partner_minus_regnerf_db": 0.7997445665720662
+    },
+    {
+      "view": 45,
+      "regnerf_db": 19.197238446122572,
+      "partner_db": 19.841178032386125,
+      "partner_minus_regnerf_db": 0.6439395862635529
+    },
+    {
+      "view": 46,
+      "regnerf_db": 17.096903267133854,
+      "partner_db": 17.08162964393853,
+      "partner_minus_regnerf_db": -0.015273623195323438
+    },
+    {
+      "view": 47,
+      "regnerf_db": 18.039640494499046,
+      "partner_db": 19.443300904848297,
+      "partner_minus_regnerf_db": 1.40366041034925
+    }
+  ],
+  "wins": 20,
+  "settings": {
+    "seed": 42,
+    "steps": 20000,
+    "training_views": [
+      25,
+      22,
+      28
+    ],
+    "test_views": [
+      1,
+      2,
+      9,
+      10,
+      11,
+      12,
+      14,
+      15,
+      23,
+      24,
+      26,
+      27,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      41,
+      42,
+      43,
+      45,
+      46,
+      47
+    ],
+    "training_scale": 4,
+    "evaluation_scale": 2,
+    "stratified": true,
+    "depth_weight": 0.1,
+    "depth_weight_start": 400.0,
+    "coarse_depth_weight": 0.1,
+    "edge_loss_weight": 0.1,
+    "edge_scale_quantile": 0.9,
+    "edge_halo": 2,
+    "selection": "Fixed repository example weight; no test-view tuning",
+    "adaptation": "Move training images to CUDA for edge scale calculation; loss code unchanged",
+    "config": {
+      "BATCH_SIZE": 1024,
+      "DEPTH_RAYS": 1024,
+      "PATCH_SIZE": 8,
+      "RAYS_PER_CHUNK": 4096,
+      "LR_INIT": 0.002,
+      "LR_FINAL": 2e-05,
+      "LR_DELAY_STEPS": 512,
+      "LR_DELAY_MULT": 0.01,
+      "BOUND_STEPS": 256,
+      "INITIAL_RANGE_FRACTION": 0.5,
+      "DEPTH_DECAY_STEPS": 512
+    },
+    "device": "NVIDIA GeForce RTX 5090"
+  },
+  "checkpoints": {
+    "regnerf": "checkpoint\\scan40_canny_pair_20261103\\regnerf\\checkpoint_20000.pt",
+    "partner": "checkpoint\\scan40_partner_20261103\\partner\\checkpoint_20000.pt"
+  },
+  "checkpoint_sha256": {
+    "regnerf": "79857c3a390149c6523b82f0237469e866cd23f184a4d796cccf1b457084c13e",
+    "partner": "3659bd8d449e1cf12a3be7afd899d6787cae0d2208b0a09f69172f268586218f"
+  },
+  "partner_revision": "92d882b6f5106c78fccb2c67691b6eb80652a358",
+  "source_sha256": {
+    "compare_partner_dtu.py": "5436b4057591b0e7dac2de3cb9bf87ba98ffaad9de847f0e3db20a32bc14e4e0",
+    "data.py": "b8807afd8dc26f6d2289c6ea1f8cd09508c46b9c5864eeb3fc3d424835d4543c",
+    "dtu.py": "9b1a5576381cc4d13641fa3ca98e95c0f4c703aea44c52e0482a308dc9fc4762",
+    "eval_dtu.py": "b4f5fcec1342b7de794b445c66438ca9ba1091401f3a4aada48ec06e6dbd5d8a",
+    "model.py": "8c208b97ef365b4986b16e42309e8e76130ff9ee11b0787c0262a8e257d699a8",
+    "render.py": "00ccd92616cd1a03fb2924e70c1066f4f3c0d6b5f4ecf25ca32638b420328f12",
+    "train.py": "78a10c06ec2cb913d9ef90697a5fae8d6f5a007f106ed928a40dbe7b7813ce60"
+  },
+  "baseline_revision": "24aaafbd4bd57a56ba486b5844ecec23f471d081",
+  "baseline_source_sha256": {
+    "compare_canny_dtu.py": "cf440d66971479f7b3fd06bbb0bdc86ed6af9bc888ad210385c8c6496b8871d1",
+    "train.py": "bc45cca61d5bc4f992724bf721b48d07b2785e4a59c07b75595e41736ed5c367",
+    "model.py": "d61f796ee3a99d455781cd3f09a751c87430d546847d14c09ba672b1f81b15e5",
+    "data.py": "1cfa5a86bc3232f131cd08de459dbb858cdc2e83a19381c9d7fc8c7a86965d9f",
+    "dtu.py": "9b1a5576381cc4d13641fa3ca98e95c0f4c703aea44c52e0482a308dc9fc4762",
+    "eval_dtu.py": "b4f5fcec1342b7de794b445c66438ca9ba1091401f3a4aada48ec06e6dbd5d8a",
+    "render.py": "00ccd92616cd1a03fb2924e70c1066f4f3c0d6b5f4ecf25ca32638b420328f12",
+    "provenance.py": "af3f11088f1d4752b5168c965e5f2eec33b650cf113817460523f377260af9cf",
+    "canny_regularizer.py": "c88223a2eeef33a81235c9b43556ec03658904f6081456ba1521030f9b295e59"
+  },
+  "training_input_sha256": {
+    "data\\dtu\\scan40\\cameras.npz": "af1ba75cbb137e5e9c83036a8db6da463365c6f54079ec31d8b8a162779fad78",
+    "data\\dtu\\scan40\\image\\000025.png": "26809ec775e93e3268d7b210fe63d921adbbc36f9d77f8c39604b6b6e03f82a0",
+    "data\\dtu\\scan40\\image\\000022.png": "187a757ae431742390f54e39b99ac78060ec67a5b0ccc7d4e36f3bf0b2e55ae9",
+    "data\\dtu\\scan40\\image\\000028.png": "b039ec08024308957c88c766ed92db8dead262776a9f9ce7ea12e74f9bfebc95"
+  },
+  "render_record": {
+    "views": [
+      1,
+      2,
+      9,
+      10,
+      11,
+      12,
+      14,
+      15,
+      23,
+      24,
+      26,
+      27,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      41,
+      42,
+      43,
+      45,
+      46,
+      47
+    ],
+    "scale": 2,
+    "steps": 20000,
+    "depth_range": [
+      1.4389525246620178,
+      2.137967987060547
+    ],
+    "selection": "All 25 test views from dtu.TEST_IDS; no display-view selection.",
+    "depth_display": "Shared pooled foreground 2nd and 98th percentiles. Test masks select the scale range only. No masks are applied to displayed depth.",
+    "depth_units": "Camera-axis depth in normalized scene units",
+    "source": "checkpoint\\scan40_partner_20261103\\source",
+    "device": "cuda"
+  },
+  "scope": "Single-scan investigation of RegNeRF Table 3. The paper uses a different setup and a benchmark aggregate.",
+  "geometry": "No scan 40 reference depth is present. Boundary and flat-surface depth errors are not measured.",
+  "source_record": "checkpoint\\scan40_partner_20261103\\protocol.json"
+}

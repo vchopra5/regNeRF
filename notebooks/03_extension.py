@@ -1,531 +1,340 @@
 import marimo
 
 __generated_with = "0.25.2"
-app = marimo.App(width="medium", app_title="Edge regularizer on DTU scan 40")
+app = marimo.App(width="medium", app_title="When neighbours have different depths")
 
 
 @app.cell
 def _():
     import json
-
     import marimo as mo
-    import numpy as np
     from PIL import Image
+    from notebooks.lab import ROOT
+    from notebooks.edge_lesson import pair_figure, ramp_figure, profile_experiment, pipeline_figure
 
-    import dtu
-    from notebooks.lab import ROOT, extension_case, plot, rmse, solve_depth, solve_depth_l1
-    from notebooks.scan40_figures import per_view_change, small, view_grid
-    from notebooks.toy_figures import SCALE
+    evidence = ROOT / "notebooks/results/partner_stone"
+    data = json.loads((evidence / "results.json").read_text(encoding="utf-8"))
+    means = data["means_db"]
 
-    results = ROOT / "notebooks" / "results"
-    images = results / "scan40_edge"
-    scene = ROOT / "data" / "dtu" / "scan40"
-    downloaded = (scene / "cameras.npz").is_file() and (scene / "image").is_dir()
-    record_file = results / "scan40_edge.json"
-    data = json.loads(record_file.read_text()) if record_file.is_file() else None
-    score_command = "uv run python compare_edge.py --output-dir checkpoint/scan40_edge --score"
+    def show(image):
+        return mo.image(image, width=min(image.width, 900))
 
-    def show(image, caption=None):
-        """Show a figure at its display size. Figures are drawn at SCALE times that size."""
-        return mo.image(image, width=image.width // SCALE, caption=caption)
+    def panel(tag, kind):
+        return show(Image.open(evidence / f"{tag}_{kind}.png"))
 
-    def result(text, kind="info", title="What this shows"):
-        return mo.callout(mo.md(text), kind=kind, title=title)
+    def result(text):
+        return mo.callout(mo.md(text), kind="info")
 
-    def stat(value, label, caption=None):
-        return mo.stat(value, label=label, caption=caption, bordered=True)
-
-    def missing(what, command):
-        return mo.callout(mo.md(f"**{what} not saved yet.** Run this before the lab:\n\n```sh\n{command}\n```"),
-                          kind="warn")
-
-    def no_photos():
-        return mo.callout(
-            mo.md("**The DTU photos are not downloaded yet.** They are not in Git. Run this once "
-                  "(about 120 MB, under a minute):\n\n```sh\nuv run python prepare_dtu.py --download\n```"),
-            kind="warn",
-        )
-    return (
-        Image,
-        data,
-        downloaded,
-        dtu,
-        extension_case,
-        images,
-        json,
-        missing,
-        mo,
-        no_photos,
-        np,
-        per_view_change,
-        plot,
-        result,
-        rmse,
-        scene,
-        score_command,
-        show,
-        small,
-        solve_depth,
-        solve_depth_l1,
-        stat,
-        view_grid,
-    )
+    return (data, json, means, mo, pair_figure, panel, pipeline_figure,
+            profile_experiment, ramp_figure, result, show)
 
 
 @app.cell
-def _(downloaded, images, mo, scene, small):
-    _edge_map = images / "edge_map_view25.png"
-    _picture = (mo.image(str(_edge_map), width=380, caption="Edge strength on training view 25 (dark = strong edge)")
-                if _edge_map.is_file() else
-                mo.image(small(scene / "image" / "000025.png", 400), width=380, caption="Scan 40, training view 25")
-                if downloaded else mo.md(""))
-    _intro = mo.md(
-        """
-        **The question.** Notebook 2 showed that RegNeRF's depth smoothing helps on the stone arch.
-        But its penalty squares each depth difference, and a squared penalty prefers a ramp to a step:
-        on an 8-pixel patch, a ramp costs 7 times less. Can we keep the smoothing and still get sharp
-        depth edges?
+def _(mo):
+    mo.md("""
+    # When neighbours have different depths
+    Two pixels can sit next to each other in a photo but belong to different surfaces.
+    Depth smoothing pulls their predicted depths together. What happens at the edge of an object?
 
-        **Our change.** Add a second depth term that uses absolute differences and is cheap at colour
-        edges. It finds edges with the first two steps of the Canny detector (blur, then Sobel
-        gradient), with no thresholds and no learned parameters.
+    Increase **Smoothing strength** and watch the two coloured dots move closer.
+    Then clear **Smooth across the boundary**. The dots return to the true depths.
+    """)
+    return
 
-        **Prediction.** If the term works, depth edges move to the outline of the arch and get
-        sharper, and the colour score near the outline improves. This can fail: stone texture is also
-        a colour edge.
 
-        **How to use this page.** Everything uses saved results, so nothing trains. Read each
-        section, then the box beside it. Allow about 35 minutes.
+@app.cell
+def _(mo):
+    pair_strength = mo.ui.slider(0, 8, step=0.5, value=2, show_value=True, label="Smoothing strength")
+    connected = mo.ui.checkbox(value=True, label="Smooth across the boundary")
+    mo.hstack([pair_strength, connected], wrap=True)
+    return connected, pair_strength
 
-        1. Why does a squared penalty blur edges?
-        2. Does the edge weight help when the colour guide is wrong?
-        3. What does the term see on the arch?
-        4. How was the weight chosen?
-        5. New cameras
-        6. The score over 25 new cameras
-        7. Near the edge and away from it
-        """
-    )
+
+@app.cell
+def _(connected, mo, pair_figure, pair_strength, result, show):
+    _image, _gap = pair_figure(pair_strength.value, connected.value)
     mo.vstack([
-        mo.md("# Sharpening depth at colour edges"),
-        mo.hstack([_picture, _intro], widths=[1, 1.4], align="start", gap=2, wrap=True),
+        show(_image),
+        result(f"True depth gap: **2.00**. Fitted gap: **{_gap:.2f}** scene units. "
+               + ("Smoothing pulls the two surfaces closer than they should be." if connected.value and pair_strength.value > 0
+                  else "The fitted depths match the two surfaces.")),
+        mo.accordion({"What this experiment solves": mo.md(r"""
+            Two exact depth observations, 2 and 4. Fit them with
+            $(d_1-2)^2+(d_2-4)^2+\lambda w(d_1-d_2)^2$.
+            The checkbox sets $w$ to 1 or 0. The fitted gap is $2/(1+2\lambda w)$.
+            This small calculation balances the observed depths against the smoothing penalty.
+            """)}),
     ])
     return
 
 
 @app.cell
 def _(mo):
+    ramp_span = mo.ui.slider(steps=[1, 3, 5, 7], value=7, show_value=True,
+                             label="Spread the change over this many pairs")
+    mo.vstack([
+        mo.md("""
+        ## 1. Why does L2 blur a depth step?
+        L1 adds the absolute depth differences. L2 adds their squares.
+        Spread the same depth change over more pixels. Watch the two costs below the plots.
+        """),
+        ramp_span,
+    ])
+    return (ramp_span,)
+
+
+@app.cell
+def _(mo, ramp_figure, ramp_span, result, show):
+    mo.vstack([
+        show(ramp_figure(ramp_span.value)),
+        result("**Spreading the step lowers the L2 cost. The L1 cost stays the same.** "
+               "L2 therefore favours a gradual change here. L1 allows a sharp step, but does not locate it."),
+        mo.accordion({"The two costs": mo.md(r"""
+            For a total change $A$ over $k$ equal differences:
+            L2 costs $k(A/k)^2=A^2/k$; L1 costs $k|A/k|=|A|$.
+            Equal depths have zero cost for both. These figures compare the penalty alone,
+            with fixed endpoints. The data loss is not included.
+            """)}),
+    ])
+    return
+
+
+@app.cell
+def _(mo):
+    penalty = mo.ui.radio(["L2", "L1"], value="L2", inline=True, label="Penalty")
+    strength = mo.ui.slider(steps=[0, 0.1, 0.5, 1, 2, 4, 8], value=2,
+                            show_value=True, label="Strength")
     case = mo.ui.dropdown(["Aligned edge", "Texture edge", "Missing colour edge"],
                           value="Aligned edge", label="Colour guide")
     mo.vstack([
-        mo.md(
-            """
-            ---
-            ## 1. Why does a squared penalty blur edges?
-            One line of pixels: two flat surfaces, one depth step at pixel 63.5, plus noise. Four solvers
-            get the same data. Only the penalty changes: squared (L2) or absolute (L1) differences, uniform
-            or weighted by `w = exp(−10·|colour difference|)`. **Watch** the blue RegNeRF curve and the
-            orange curve (ours) at the step. Reference depth is used only for the score.
-            """
-        ),
-        case,
+        mo.md("""
+        ## 2. Can colour tell us where to stop smoothing?
+        Choose L1 or L2, then change the colour guide. The left plot smooths every pair equally.
+        The right plot reduces smoothing where the colour changes. Compare the depth step and the flat surface.
+        """),
+        mo.hstack([penalty, strength, case], wrap=True),
+        mo.md("*The controls recalculate this small depth fit. The observations stay the same.*"),
     ])
-    return (case,)
+    return case, penalty, strength
 
 
 @app.cell
-def _(case, extension_case, mo, np, plot, result, rmse, solve_depth, solve_depth_l1, stat):
-    truth, observations, guide, boundary, flat = extension_case(case.value)
-    weights = np.exp(-10 * np.abs(np.diff(guide)))
-    solvers = {
-        "L2 uniform (RegNeRF)": solve_depth(observations, 8),
-        "L2 edge-weighted": solve_depth(observations, 8, weights),
-        "L1 uniform": solve_depth_l1(observations, 1),
-        "L1 edge-weighted (ours)": solve_depth_l1(observations, 1, weights),
-    }
-    _base, _ours = solvers["L2 uniform (RegNeRF)"], solvers["L1 edge-weighted (ours)"]
-    _rows = [{"Penalty": "None (noisy data)", "Boundary RMSE": rmse(observations, truth, boundary),
-              "Flat RMSE": rmse(observations, truth, flat), "All RMSE": rmse(observations, truth)}]
-    _rows += [{"Penalty": name, "Boundary RMSE": rmse(p, truth, boundary), "Flat RMSE": rmse(p, truth, flat),
-               "All RMSE": rmse(p, truth)} for name, p in solvers.items()]
-    _rows = [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in r.items()} for r in _rows]
+def _(case, mo, penalty, profile_experiment, result, show, strength):
+    _image, _rows = profile_experiment(case.value, penalty.value, strength.value)
+    _delta = _rows[1]["Boundary RMSE"] - _rows[0]["Boundary RMSE"]
+    _flat_delta = _rows[1]["Flat RMSE"] - _rows[0]["Flat RMSE"]
+    _note = {
+        "Aligned edge": "Here the colour change lines up with the depth step.",
+        "Texture edge": "The extra colour stripe lies on a flat surface. It reduces smoothing where the depth should stay flat.",
+        "Missing colour edge": "The colour stays constant across the depth step. Both plots use the same weights and give the same fit.",
+    }[case.value]
     mo.vstack([
-        mo.hstack(
-            [
-                mo.vstack([
-                    mo.Html(plot({"Reference": truth, "Noisy depth": observations,
-                                  "L2 uniform (RegNeRF)": _base, "L1 edge-weighted (ours)": _ours},
-                                 "Two flat surfaces with one depth step")),
-                    mo.Html(plot({"Colour guide": guide}, "Colour guide", "Colour (0 to 1)")),
-                ]),
-                mo.vstack([
-                    mo.hstack([
-                        stat(f"{rmse(_base, truth, boundary):.3f}", "Boundary error, RegNeRF", "RMSE"),
-                        stat(f"{rmse(_ours, truth, boundary):.3f}", "Boundary error, ours", "RMSE"),
-                    ], widths="equal"),
-                    result(
-                        "The squared penalty turns the step into a ramp, so its boundary error is the largest. "
-                        "Absolute differences keep most of the step, even with a uniform weight (see the table). "
-                        "The edge weight then helps where the guide has an edge at the true step.\n\n"
-                        "**A squared penalty blurs edges. An absolute one keeps them.**"
-                    ),
-                ]),
-            ],
-            widths=[2, 1],
-            align="start",
-            gap=1.5,
-            wrap=True,
-        ),
-        mo.accordion({
-            "All four penalties (table)": mo.ui.table(_rows, selection=None, show_column_summaries=False),
-            "How the regions are defined": mo.md(
-                "Boundary pixels are within 3.5 pixels of the step. Flat pixels are at least 12.5 pixels from "
-                "it. Both masks come from the reference, not from the estimate. Depths are in scene units."),
-        }),
+        show(_image),
+        result(f"{_note} Using colour weights changes depth error (RMSE) by **{_delta:+.3f}** "
+               f"at the step and **{_flat_delta:+.3f}** on the flat surface. A negative change means less error."),
+        mo.accordion({"Simulation details": mo.md(r"""
+            Both panels minimize the same squared data error plus $\lambda\sum w\,\phi(\Delta d)$.
+            Choose $\phi(z)=z^2$ or $|z|$. The observations and noise seed stay fixed.
+            The simple teaching weight is $\exp(-10|\Delta\mathrm{colour}|)$.
+            Same coefficient does not mean equal effective strength for L1 and L2.
+
+            Boundary pixels are within 3.5 pixels of the true step. Flat pixels are at least
+            12.5 pixels away. Reference depth is used only for scoring.
+            This simulation replaces the smoothing penalty. RegNeRF + edge L1 below instead
+            keeps the original L2 term and adds a weighted L1 term.
+            """)}),
     ])
     return
 
 
 @app.cell
-def _(extension_case, mo, np, result, rmse, solve_depth, solve_depth_l1):
-    _summary = []
-    for _case in ["Aligned edge", "Texture edge", "Missing colour edge"]:
-        _truth, _obs, _guide, _boundary, _flat = extension_case(_case)
-        _w = np.exp(-10 * np.abs(np.diff(_guide)))
-        _base = solve_depth(_obs, 8)
-        _ours = solve_depth_l1(_obs, 1, _w)
-        _summary.append({"Case": _case,
-                         "Boundary, RegNeRF": round(rmse(_base, _truth, _boundary), 4),
-                         "Boundary, ours": round(rmse(_ours, _truth, _boundary), 4),
-                         "Flat, RegNeRF": round(rmse(_base, _truth, _flat), 4),
-                         "Flat, ours": round(rmse(_ours, _truth, _flat), 4)})
+def _(mo, pipeline_figure, result, show):
     mo.vstack([
-        mo.md(
-            """
-            ---
-            ## 2. Does the edge weight help when the colour guide is wrong?
-            The same data with three guides: an edge at the step (aligned), an extra colour band on a flat
-            surface (texture), and no colour edge at all (missing). **Watch** the flat columns in the
-            texture case and the boundary columns in the missing case.
-            """
-        ),
-        mo.hstack(
-            [
-                mo.ui.table(_summary, selection=None, show_column_summaries=False),
-                result(
-                    "Our term has a lower boundary error than RegNeRF's in all three cases. Most of that gain "
-                    "comes from the absolute differences, so it remains when the colour edge is missing. The "
-                    "texture band does not create a false step: the term stops resisting a step, but it does "
-                    "not push one into being.\n\n"
-                    "**A wrong guide costs little here. The real test is a blurry guide in a trained NeRF.**"
-                ),
-            ],
-            widths=[1.6, 1],
-            align="start",
-            gap=1.5,
-            wrap=True,
-        ),
+        mo.md("""
+        ## 3. How RegNeRF + edge L1 works
+        We keep RegNeRF's L2 smoothing and add an L1 penalty to the fine depth output.
+        The new penalty becomes weaker where the model's rendered colour changes.
+        """),
+        show(pipeline_figure()),
+        result("**The added L1 term allows more depth change at colour edges.** "
+               "The original L2 term still smooths those edges, and a colour change does not force a depth step."),
+        mo.accordion({"Equations and filter settings": mo.md(r"""
+            $\Delta_xd$ and $\Delta_yd$ are right and lower depth differences.
+            $a$ is anchor opacity, with gradients stopped.
+            $$S_2=\operatorname{mean}[a((\Delta_xd)^2+(\Delta_yd)^2)]$$
+            $$S_1=\operatorname{mean}[a(w_x|\Delta_xd|+w_y|\Delta_yd|)]$$
+            $$L_{\mathrm{depth}}=0.1S_{2,\mathrm{coarse}}+\lambda_2(t)S_{2,\mathrm{fine}}+0.1S_{1,\mathrm{fine}}.$$
+
+            The fine L2 weight $\lambda_2(t)$ falls from 400 to 0.1 over the first 512 steps.
+            The coarse L2 and added fine L1 coefficients stay at 0.1.
+
+            Convert RGB to grey with coefficients 0.299, 0.587, 0.114.
+            Apply a 3 × 3 Gaussian with sigma 1, then Sobel filters.
+            For gradient magnitude $g$, use $w_{ij}=\exp(-\max(g_i,g_j)/s)$.
+            The scale $s$ is the 90th percentile over the three training photos.
+            A two-pixel halo supplies the filter's context.
+
+            Guide rendering uses evaluation mode and no gradients. The weights are recomputed
+            each step but receive no gradient through this loss. RGB supervision stays active.
+            Virtual patches use a separate random generator. The code adds RGB and depth gradients,
+            clips them, then updates the network with Adam.
+            """)}),
     ])
     return
 
 
 @app.cell
-def _(data, downloaded, images, missing, mo, no_photos, result, scene, score_command, small):
-    _edge_map = images / "edge_map_view25.png"
-    if not downloaded:
-        _body = no_photos()
-    elif data is None or not _edge_map.is_file():
-        _body = missing("The scan 40 edge comparison is", score_command)
-    else:
-        _scale = data["edge_map"]["edge_scale"]
-        _body = mo.hstack(
-            [
-                mo.image(small(scene / "image" / "000025.png", 400), width=300, caption="Training view 25"),
-                mo.image(str(_edge_map), width=300, caption="Edge strength 1 − w (dark = strong edge)"),
-                result(
-                    "The outline of the arch and the opening are dark, so a depth step there is cheap. These are "
-                    "real depth edges. The stone texture is grey: there the term relaxes a little, though the "
-                    "surface is flat.\n\n"
-                    f"The scale `s` = {_scale:.3f} is the 90th percentile of the gradient over the 3 training "
-                    "photos. In training, the term uses the rendered colour of each unseen-camera patch, so early "
-                    "edges are weak.\n\n"
-                    "**The term sees the outline, and some texture.**",
-                ),
-            ],
-            widths=[1, 1, 1.2],
-            align="start",
-            gap=1,
-            wrap=True,
-        )
+def _(data, mo):
+    view_choice = mo.ui.dropdown(
+        {f"View {row['view']}": f"view{row['view']}" for row in data["per_view"]},
+        value="View 24", label="Saved test camera")
     mo.vstack([
-        mo.md(
-            """
-            ---
-            ## 3. What does the term see on the arch?
-            Two models train on the same 3 photos with the same seed, steps, sampling, and RegNeRF depth
-            penalty. **The only difference:** the second adds λ × our edge term:
-            `mean(opacity · w · |depth difference|)` with `w = exp(−‖∇colour‖ / s)`. The first model is
-            the "smoothing on" model of notebook 2. **Watch** which lines in the edge map are dark.
-            """
-        ),
-        _body,
-    ])
-    return
+        mo.md("""
+        ## 4. Does it help the stone arch?
+        Choose a test view, then switch between **Depth** and **Colour**.
+        Look at the opening, pillar edges, and top block. Where do the models differ?
 
-
-@app.cell
-def _(data, missing, mo, result, score_command):
-    if data is None or not data.get("pilot"):
-        _body = missing("The weight pilot is",
-                        "uv run python compare_edge.py --output-dir checkpoint/scan40_edge --pilot\n" + score_command)
-    else:
-        _pilot = data["pilot"]
-        _rows = [{"λ": ("0 (RegNeRF)" if k == "0" else k), "Validation mean (dB)": round(v["mean_db"], 3),
-                  **{f"View {view}": round(db, 2) for view, db in v["per_view_db"].items()}}
-                 for k, v in _pilot["scores"].items()]
-        _body = mo.hstack(
-            [
-                mo.ui.table(_rows, selection=None, show_column_summaries=False),
-                result(
-                    f"Each candidate trained for {_pilot['steps']} steps and was scored on views "
-                    f"{', '.join(str(v) for v in _pilot['validation_views'])}. The 3-view models never train on "
-                    "these views, and they are not test views. Rule: the highest mean validation PSNR; a tie "
-                    "within 0.01 dB goes to the smaller λ.\n\n"
-                    f"**λ = {_pilot['chosen_lambda']:g} was fixed before any test view was scored.**",
-                ),
-            ],
-            widths=[1.6, 1],
-            align="start",
-            gap=1.5,
-            wrap=True,
-        )
-    mo.vstack([
-        mo.md(
-            """
-            ---
-            ## 4. How was the weight chosen?
-            The weight λ sets how strong the edge term is next to the RegNeRF term. **Watch** whether one λ
-            stands out, or whether the candidates are close.
-            """
-        ),
-        _body,
-    ])
-    return
-
-
-@app.cell
-def _(dtu, mo):
-    view_choice = mo.ui.dropdown({f"View {v}": v for v in dtu.TEST_IDS}, value="View 45", label="Test view")
-    mo.vstack([
-        mo.md(
-            """
-            ---
-            ## 5. New cameras
-            Both models render every test camera, which neither saw in training. Start with view 45.
-            **Watch** the outline of the pillars and the opening under the top stone, first in colour, then
-            in depth. Then **change** the view.
-            """
-        ),
+        Both models trained on the same three photos of DTU scan 40.
+        These 25 saved comparisons open without rendering. Each view shows its measured RGB scores.
+        """),
         view_choice,
     ])
     return (view_choice,)
 
 
 @app.cell
-def _(Image, downloaded, images, json, missing, mo, no_photos, result, scene, show, small, view_choice, view_grid):
-    _record_file = images / "render_record.json"
-    _view = view_choice.value
-    if not _record_file.is_file():
-        _body = missing("The test-view renders are",
-                        "uv run python -m notebooks.render_scan40_views --output notebooks/results/scan40_edge "
-                        "--conditions regnerf=checkpoint/scan40_pair_new/on/checkpoint_20000.pt "
-                        "edge=checkpoint/scan40_edge/edge/checkpoint_20000.pt")
-    elif not downloaded:
-        _body = no_photos()
-    else:
-        _record = json.loads(_record_file.read_text())
-
-        def _open(name):
-            return Image.open(images / f"view{_view}_{name}.jpg")
-
-        _body = mo.vstack([
-            show(view_grid(small(scene / "image" / f"{_view:06}.png", 600), _open("rgb_regnerf"), _open("rgb_edge"),
-                           _open("depth_regnerf"), _open("depth_edge"), _record["depth_ranges"][str(_view)],
-                           labels=("RegNeRF", "RegNeRF + edge term")),
-                 caption=f"Test view {_view}, step {_record['step']}, rendered at scale {_record['scale']}. "
-                         "Top: colour. Bottom: depth (light is near)."),
-            result("**Describe only what you can see.** Is the depth outline of the arch sharper? Does the stone "
-                   "surface stay flat, or does its texture show up in depth? Each view is an illustration; "
-                   "sections 6 and 7 use all 25 test views.", kind="neutral", title="Look and compare"),
-        ])
-    _body
-    return
-
-
-@app.cell
-def _(data, dtu, json, missing, mo, np, per_view_change, result, score_command, show, stat, view_choice):
-    if data is None:
-        _body = missing("The scan 40 edge comparison is", score_command)
-    else:
-        _rows = data["per_view"]
-        if tuple(r["view"] for r in _rows) != dtu.TEST_IDS:
-            raise ValueError("The record must contain the 25 test views in protocol order.")
-        _base = np.array([r["regnerf_db"] for r in _rows])
-        _ours = np.array([r["edge_db"] for r in _rows])
-        _delta = _ours - _base
-        _better = int((_delta > 0).sum())
-        _mean = float(_delta.mean())
-        _effect = (f"**raised** the mean colour score by **{_mean:.2f} dB**" if _mean >= 0.005 else
-                   f"**lowered** the mean colour score by **{-_mean:.2f} dB**" if _mean <= -0.005 else
-                   "**did not change** the mean colour score")
-        _lam = data["record"]["edge_loss_weight"]
-        _body = mo.vstack([
-            mo.hstack([
-                stat(f"{_base.mean():.2f} dB", "RegNeRF", "mean of 25 test views"),
-                stat(f"{_ours.mean():.2f} dB", f"+ edge term (λ = {_lam:g})", "mean of 25 test views"),
-                stat(f"{_mean:+.2f} dB", "Difference", f"better in {_better} of 25 views"),
-            ], widths="equal", gap=1),
-            mo.hstack(
-                [
-                    show(per_view_change(dtu.TEST_IDS, _delta, highlight=view_choice.value, change="edge term"),
-                         caption=f"The view chosen in section 5 (view {view_choice.value}) has a dark label."),
-                    result(
-                        f"On this scan, the edge term {_effect}. It was better in **{_better} of 25** test views; "
-                        f"the change per view ranges from {_delta.min():+.2f} to {_delta.max():+.2f} dB.\n\n"
-                        "**Limits.** One scan and one seed. PSNR measures colour, not shape.",
-                        kind="success" if _mean >= 0.005 else "warn" if _mean <= -0.005 else "neutral",
-                    ),
-                ],
-                widths=[2, 1],
-                align="start",
-                gap=1.5,
-                wrap=True,
-            ),
-            mo.accordion({
-                "Every test view (table)": mo.ui.table(
-                    [{"View": r["view"], "RegNeRF (dB)": round(r["regnerf_db"], 2),
-                      "+ edge (dB)": round(r["edge_db"], 2),
-                      "Difference (dB)": round(r["edge_minus_regnerf_db"], 2)} for r in _rows],
-                    selection=None, show_column_summaries=False),
-                "Training and evaluation record": mo.md("```json\n" + json.dumps(
-                    {k: v for k, v in data["record"].items() if k != "local_diff"}, indent=2) + "\n```"),
-            }),
-        ])
+def _(data, mo, panel, result, view_choice):
+    _notes = {
+        "view24": "The added term reduces the vertical mark inside the opening. Both depth maps still have uneven surfaces.",
+        "view10": "Both models distort the top block. RegNeRF + edge L1 has a lower colour score in this view.",
+        "view43": "The vertical mark is reduced, but the depth boundary around the opening remains blurred.",
+    }
+    _score = next(row for row in data["per_view"] if f"view{row['view']}" == view_choice.value)
     mo.vstack([
-        mo.md(
-            """
-            ---
-            ## 6. The score over 25 new cameras
-            The same score as notebook 2: for each test photo, only the object's pixels, turned into PSNR.
-            The result is the mean of the 25 values; higher is better. It is not the PSNR printed during
-            training. **Watch** whether the bars agree in sign, or whether a few views decide the mean.
-            """
-        ),
-        _body,
-    ])
-    return
-
-
-@app.cell
-def _(data, mo, result, stat):
-    if data is None:
-        _body = mo.md("")
-    else:
-        _e = {name: value["means"] for name, value in data["edges"].items()}
-        _labels = [
-            ("boundary_band_psnr", "Boundary band PSNR (dB)", "higher is better", 2),
-            ("interior_psnr", "Interior PSNR (dB)", "higher is better", 2),
-            ("strong_depth_edges_near_outline", "Strong depth edges near the outline", "higher is better", 3),
-            ("strong_depth_edge_distance_px", "Mean distance of strong depth edges (px)", "lower is better", 2),
-        ]
-        _rows = [{"Metric": label, "RegNeRF": round(_e["regnerf"][key], digits),
-                  "+ edge term": round(_e["edge"][key], digits),
-                  "Difference": round(_e["edge"][key] - _e["regnerf"][key], digits), "Direction": direction}
-                 for key, label, direction, digits in _labels]
-        _band = _e["edge"]["boundary_band_psnr"] - _e["regnerf"]["boundary_band_psnr"]
-        _inner = _e["edge"]["interior_psnr"] - _e["regnerf"]["interior_psnr"]
-        _near = _e["edge"]["strong_depth_edges_near_outline"] - _e["regnerf"]["strong_depth_edges_near_outline"]
-        _body = mo.vstack([
-            mo.hstack([
-                stat(f"{_band:+.2f} dB", "Boundary band", "edge term minus RegNeRF"),
-                stat(f"{_inner:+.2f} dB", "Interior", "edge term minus RegNeRF"),
-                stat(f"{_near:+.3f}", "Strong depth edges near outline", "change in share"),
-            ], widths="equal", gap=1),
-            mo.hstack(
-                [
-                    mo.ui.table(_rows, selection=None, show_column_summaries=False),
-                    result(
-                        "The mask outline is a true occlusion boundary. A sharper, better placed depth edge "
-                        "should raise the boundary-band score and put more strong depth gradients next to the "
-                        "outline. The arch's own corners and the opening also make depth edges, so the last two "
-                        "rows are a proxy.\n\n"
-                        "**DTU in this repo has no reference depth, so these numbers cannot show a depth error "
-                        "directly.**",
-                        title="How to read it",
-                    ),
-                ],
-                widths=[1.6, 1],
-                align="start",
-                gap=1.5,
-                wrap=True,
-            ),
-        ])
-    mo.vstack([
-        mo.md(
-            """
-            ---
-            ## 7. Near the edge and away from it
-            Each test view is split by its object mask. The **boundary band** is the mask pixels within 3 px
-            of the outline (scale 2). The **interior** is the mask pixels at least 8 px from it. **Strong depth
-            edges** are the 5% of pixels with the largest depth gradient, inside the mask plus a 3 px margin.
-            **Watch** whether the boundary band and the interior move in the same direction.
-            """
-        ),
-        _body,
+        mo.ui.tabs({"Depth": panel(view_choice.value, "depth"),
+                    "Colour": panel(view_choice.value, "rgb")}),
+        result(f"Foreground RGB PSNR: RegNeRF **{_score['regnerf_db']:.2f} dB**; "
+               f"RegNeRF + edge L1 **{_score['partner_db']:.2f} dB**; "
+               f"difference **{_score['partner_minus_regnerf_db']:+.2f} dB**. "
+               + _notes.get(view_choice.value, "Compare the opening, pillar edges, and top block.")
+               + " The left panel is a real photo. We have no reference depth for this scan, "
+               "so a smoother depth map alone cannot tell us which shape is more accurate."),
     ])
     return
 
 
 @app.cell
 def _(mo):
+    orbit_settings = (
+        mo.md("{horizontal}\n\n{vertical}")
+        .batch(
+            horizontal=mo.ui.slider(-180, 180, step=1, value=0, show_value=True,
+                                    label="Turn left or right (degrees)", full_width=True),
+            vertical=mo.ui.slider(-90, 90, step=1, value=0, show_value=True,
+                                  label="Turn up or down (degrees)", full_width=True),
+        )
+        .form(submit_button_label="Render view")
+    )
     mo.vstack([
-        mo.md("---\n## Summary"),
-        mo.md(
-            """
-            **Questions for discussion**
-            - In section 1, which change sharpened the step: absolute differences, the edge weight, or both?
-            - In sections 6 and 7, did the edge term change the colour score, the boundary band, or the
-              depth-edge proxy? Do they agree?
-            - Compare the size of the change with the seed-to-seed variation in notebook 1. Is one seed enough?
-            - Find the test views that changed most in section 6. Open them in section 5: what changed at the
-              outline?
+        mo.md("""
+        ## 5. Move around the arch
+        Turn the camera left or right, or look from above or below. Select **Render view** to draw
+        both models from that position. The top row stays at camera 25; the bottom row follows your settings.
 
-            **Next.** Train 2 more seeds of both models. Add reference depth for scan 40 and measure depth error
-            at true boundaries and on flat stone. Train with uniform L1 alone, to separate the two parts of the
-            change, as in section 1.
-            """
-        ),
+        Start with both angles at zero. Then try a 20° horizontal turn and a 10° vertical turn.
+        Watch the opening and pillars. You can turn through a full circle to inspect the back as well.
+        Set both angles to zero to return to the start.
+
+        This renders new colour and depth images from the saved models at 100 × 75 pixels.
+        Both models use the same camera and keep their learned weights. The first render loads the models;
+        repeated angles reuse the images. A GPU is faster than a CPU. The elapsed time appears below each render.
+        """),
+        orbit_settings,
+    ])
+    return (orbit_settings,)
+
+
+@app.cell
+def _(mo, orbit_settings, result, show):
+    if orbit_settings.value is None:
+        _body = mo.md("Choose the two angles, then select **Render view**.")
+    else:
+        try:
+            import time as _time
+            from notebooks.extension_camera import render_comparison as _render_comparison
+            _start = _time.perf_counter()
+            with mo.status.spinner(title="Drawing both models from your camera position..."):
+                _boards, _device, _step = _render_comparison(**orbit_settings.value)
+            _elapsed = _time.perf_counter() - _start
+            _body = mo.vstack([
+                mo.ui.tabs({"Colour": show(_boards["rgb"]), "Depth": show(_boards["depth"])}),
+                mo.md(f"Rendered in **{_elapsed:.2f} s** on {'GPU' if _device == 'cuda' else 'CPU'}. "
+                      f"Both models use their saved weights at step {_step:,}."),
+                result("At zero degrees, each lower image matches the image above it. "
+                       "As you move, look for surfaces that block the opening or break a pillar. "
+                       "Views far from the training cameras can expose large errors.\n\n"
+                       "We have no reference photos at these new positions. Use the 25 test views "
+                       "above for measured RGB comparisons; moving this camera does not change their scores."),
+            ])
+        except (ImportError, FileNotFoundError, ValueError, KeyError) as _error:
+            _body = result(f"The camera view could not load: {_error}\n\n"
+                           "Install the notebook requirements and restore the model files in `notebooks/models/`. "
+                           "You can still inspect all 25 saved views above.")
+    _body
+    return
+
+
+@app.cell
+def _(data, means, mo):
+    mo.vstack([
+        mo.md("## 6. What changed across the test views?"),
+        mo.hstack([
+            mo.stat(f"{means['regnerf']:.2f} dB", label="Standard RegNeRF"),
+            mo.stat(f"{means['partner']:.2f} dB", label="RegNeRF + edge L1"),
+            mo.stat(f"{data['difference_db']:+.2f} dB", label="Edge L1 minus RegNeRF"),
+        ], widths="equal"),
+        mo.md(f"**RegNeRF + edge L1 scores higher in {data['wins']} of 25 test views.** "
+              "Each score above is the arithmetic mean of 25 per-view foreground RGB PSNR values. "
+              "These are test scores, not training-batch scores. One scene and one seed."),
         mo.accordion({
-            "How the two models were trained": mo.md(
-                """
-                - **Same for both:** training views 25, 22, and 28; seed 42; 20,000 steps; Adam with the same
-                  learning-rate schedule; training scale 4; the same ray sampling, coarse jitter, sample-space
-                  annealing, and RegNeRF depth penalty (fine weight 400 → 0.1 by step 512, coarse weight 0.1).
-                - **The only difference:** the second model adds λ × the edge term on the fine level of each
-                  unseen-camera patch. It renders each patch with a 2-pixel border in eval mode (no noise, no
-                  random numbers) to compute the colour gradient. The colour is detached, so the term moves only
-                  depth.
-                - **Baseline reuse:** the RegNeRF model is the saved notebook 2 model. The training code has not
-                  changed since then, apart from the new term. With λ = 0, the new code gives bit-identical
-                  weights after 5 steps.
-                - **Origin of the term:** edge-aware L1 smoothness from self-supervised monocular depth (Godard
-                  et al., 2017). The new part is its use on RegNeRF's unseen-camera patches, with the rendered
-                  colour as the guide.
-                - **Scoring:** both models at step 20000, evaluation scale 2, the 25 test views from `dtu.py`.
-                - **Record:** `compare_edge.py` writes the code revision, local changes, settings, pilot scores,
-                  and checkpoint paths. `eval_edges.py` computes the edge metrics.
-                """
-            ),
+            "All 25 test scores": mo.vstack([
+                mo.ui.table([{"View": row["view"], "RegNeRF (dB)": round(row["regnerf_db"], 3),
+                              "+ edge L1 (dB)": round(row["partner_db"], 3),
+                              "Difference (dB)": round(row["partner_minus_regnerf_db"], 3)}
+                             for row in data["per_view"]], selection=None, show_column_summaries=False),
+                mo.md("Positive differences favour RegNeRF + edge L1. Each per-view score uses RGB error "
+                      "inside the test photo's foreground mask. Both models are evaluated at scale 2."),
+            ]),
+            "Depth display and limits": mo.md("""
+                The depth panels use one shared scale across both models and all 25 cameras.
+                Dark means near; light means far. The range is the pooled foreground 2nd to 98th
+                percentile. Values outside it are clipped for display. No foreground mask hides
+                the predicted depth. The reference panel is a colour photo, not a depth map.
+
+                We cannot measure boundary depth error or flat-surface depth error without reference depth.
+                The small simulations above have known depth. Their RMSE results do not apply to this scan.
+                This is a single-scan investigation of RegNeRF Table 3. The paper reports a benchmark
+                aggregate and uses a different training setup.
+                """),
+            "Training settings and source": mo.md("""
+                Both models: 20,000 steps, seed 42, training views 25/22/28, scale 4 (400 × 300),
+                Adam, coarse jitter, 1,024 RGB rays and 1,024 depth rays per step, 8 × 8 depth patches.
+                The fine L2 weight falls from 400 to 0.1 over 512 steps. Coarse L2 stays at 0.1.
+                The extension adds fine L1 with coefficient 0.1, fixed from the repository example.
+                Test photos and masks do not select this coefficient or enter training.
+
+                The saved standard model was reused after checking settings, source, and training inputs.
+                RegNeRF + edge L1 used the RTX 5090 and committed source 92d882b.
+                The one-time edge-scale calculation ran on CUDA. The loss formula was unchanged.
+
+                This lesson reads 50 saved panels and all 25 scores from
+                notebooks/results/partner_stone. It needs no downloaded DTU data or local checkpoints.
+                Full checkpoint paths, source hashes, and settings are in results.json in that folder.
+                Opening the notebook does not train a model.
+                """),
+            "Next test": mo.md("Repeat with more seeds. Compare added uniform L1 with added weighted L1, "
+                               "keeping the coefficient and loss levels fixed. Use reference depth to measure "
+                               "errors at true boundaries and on flat surfaces."),
         }),
     ])
     return
