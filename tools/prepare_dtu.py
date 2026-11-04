@@ -13,6 +13,17 @@ import dtu
 DATASET = "turandai/gaussian-surfels-dtu"
 REVISION = "c70b6188f0eb1bac67843971e15ef97d213c6c09"
 CAMERA_SHA256 = "af1ba75cbb137e5e9c83036a8db6da463365c6f54079ec31d8b8a162779fad78"
+# SHA-256 of all 75 files at the pinned revision: cameras, 49 images, and 25 test masks.
+PINNED_HASHES = Path(__file__).with_name("dtu_scan40_sha256.json")
+
+
+def pinned_mismatches(report):
+    """Return the files whose SHA-256 differs from the pinned list. Missing files count as different."""
+    pinned = json.loads(PINNED_HASHES.read_text(encoding="utf-8"))
+    if (pinned["repository"], pinned["revision"]) != (DATASET, REVISION):
+        raise ValueError("The pinned hash list does not match the pinned download revision.")
+    found = report["file_sha256"]
+    return sorted(name for name, digest in pinned["files"].items() if found.get(name) != digest)
 
 
 def validate(scene):
@@ -67,9 +78,12 @@ def main():
                           local_dir=args.data_dir.parent, token=False)
         source = dict(repository=DATASET, revision=REVISION, source_type="community mirror of IDR-format DTU")
     report = validate(args.data_dir)
+    mismatches = pinned_mismatches(report)
+    report["pinned_sha256_match"] = not mismatches
     if source is not None:
-        if report["camera_sha256"] != CAMERA_SHA256:
-            raise ValueError("The downloaded scan-40 camera checksum differs from the verified mirror.")
+        if report["camera_sha256"] != CAMERA_SHA256 or mismatches:
+            raise ValueError("The downloaded scan-40 files differ from the verified mirror. Do not use them. "
+                             "Files: " + ", ".join(mismatches or ["cameras.npz"]))
         report["source"] = source
         (args.data_dir / "download_source.json").write_text(json.dumps(source, indent=2), encoding="utf-8")
     elif (args.data_dir / "download_source.json").is_file():
@@ -77,6 +91,11 @@ def main():
     (args.data_dir / "validation.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Validated {report['scene']}: 49 images, 49 calibrated cameras, {len(dtu.TEST_IDS)} test masks.")
     print(f"Image size: {report['image_size']}. Training views: {report['training_views']}.")
+    if mismatches:
+        print(f"Warning: {len(mismatches)} files differ from the pinned SHA-256 list. This copy is not the "
+              "verified mirror download; results may not be comparable.")
+    else:
+        print("All 75 files match the pinned SHA-256 list.")
     print(f"Saved {args.data_dir / 'validation.json'}. No training started.")
 
 

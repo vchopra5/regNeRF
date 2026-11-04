@@ -448,7 +448,7 @@
     "packaged_revision": "92d882b6f5106c78fccb2c67691b6eb80652a358",
     "training_record": "checkpoint\\scan40_canny_pair_20261103\\protocol.json",
     "training": {
-      "scene": "C:\\Users\\visha\\OneDrive\\Documents\\Programming\\regNerF\\data\\dtu\\scan40",
+      "scene": "data/dtu/scan40",
       "seed": 42,
       "steps": 20000,
       "started_utc": "2026-11-04T02:01:01.191900+00:00",
@@ -496,7 +496,7 @@
       "optimizer": "Adam",
       "device": "NVIDIA GeForce RTX 5090",
       "torch_version": "2.11.0+cu128",
-      "python": "C:\\Users\\visha\\miniconda3\\python.exe",
+      "python": "python",
       "code_revision": "24aaafbd4bd57a56ba486b5844ecec23f471d081",
       "local_status": "M README.md\n M eval_dtu.py\n M train.py\n?? canny_regularizer.py\n?? compare_canny_dtu.py\n?? compare_canny_weights.py\n?? compare_soft_edges.py\n?? summarize_soft_edges.py\n?? test_canny_regularizer.py",
       "source_sha256": {
@@ -544,8 +544,8 @@
       },
       "guide": "Detached rendered RGB in evaluation mode; no test photos or masks",
       "checkpoints": {
-        "canny_weight": "C:\\Users\\visha\\OneDrive\\Documents\\Programming\\regNerF\\checkpoint\\scan40_canny_pair_20261103\\canny_weight\\checkpoint_20000.pt",
-        "regnerf": "C:\\Users\\visha\\OneDrive\\Documents\\Programming\\regNerF\\checkpoint\\scan40_canny_pair_20261103\\regnerf\\checkpoint_20000.pt"
+        "canny_weight": "checkpoint/scan40_canny_pair_20261103/canny_weight/checkpoint_20000.pt",
+        "regnerf": "checkpoint/scan40_canny_pair_20261103/regnerf/checkpoint_20000.pt"
       }
     }
   },
@@ -572,7 +572,7 @@
         "render.py": "00ccd92616cd1a03fb2924e70c1066f4f3c0d6b5f4ecf25ca32638b420328f12",
         "train.py": "78a10c06ec2cb913d9ef90697a5fae8d6f5a007f106ed928a40dbe7b7813ce60"
       },
-      "scene": "C:\\Users\\visha\\OneDrive\\Documents\\Programming\\regNerF\\data\\dtu\\scan40",
+      "scene": "data/dtu/scan40",
       "seed": 42,
       "steps": 20000,
       "training_views": [
@@ -644,8 +644,8 @@
       "torch_version": "2.11.0+cu128",
       "baseline_checkpoint_sha256": "79857c3a390149c6523b82f0237469e866cd23f184a4d796cccf1b457084c13e",
       "checkpoints": {
-        "regnerf": "C:\\Users\\visha\\OneDrive\\Documents\\Programming\\regNerF\\checkpoint\\scan40_canny_pair_20261103\\regnerf\\checkpoint_20000.pt",
-        "partner": "C:\\Users\\visha\\OneDrive\\Documents\\Programming\\regNerF\\checkpoint\\scan40_partner_20261103\\partner\\checkpoint_20000.pt"
+        "regnerf": "checkpoint/scan40_canny_pair_20261103/regnerf/checkpoint_20000.pt",
+        "partner": "checkpoint/scan40_partner_20261103/partner/checkpoint_20000.pt"
       },
       "started_utc": "2026-11-04T03:07:29.148193+00:00"
     }

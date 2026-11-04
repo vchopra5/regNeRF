@@ -37,20 +37,45 @@ class RemoteZip(io.RawIOBase):
         return data
 
 
+def safe_name(member):
+    """Flatten a zip member name to one file name. Reject names that could leave the output folder."""
+    name = member.replace('\\', '/').strip('/')
+    parts = name.split('/')
+    if not name or any(part in ('', '.', '..') for part in parts) or ':' in name:
+        raise ValueError(f'Unsafe archive member name: {member!r}')
+    return parts[-1] if name.lower().endswith('.ply') else '__'.join(parts)
+
+
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser()
+    import hashlib
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--archive', default='Points.zip')
     parser.add_argument('--match', default='stl040_total.ply')
+    parser.add_argument('--sha256', help='Expected SHA-256 of the extracted file. Stop if it differs.')
     args = parser.parse_args()
+    # HTTPS with the default certificate checks of urllib.
     url = 'https://roboimagedata2.compute.dtu.dk/data/MVS/' + args.archive
+    folder = Path('data/dtu_reference')
+    folder.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(RemoteZip(url)) as archive:
         matches = [n for n in archive.namelist() if args.match.lower() in n.lower()]
         print(matches, flush=True)
+        if args.sha256 and len(matches) != 1:
+            raise SystemExit('--sha256 needs exactly one matching file.')
         for name in matches:
             info = archive.getinfo(name)
             print(name, info.file_size, 'bytes', flush=True)
-            output = Path('data/dtu_reference') / (Path(name).name if name.endswith('.ply') else name.replace('/', '__'))
+            output = folder / safe_name(name)
+            if output.exists():
+                data = output.read_bytes()
+            else:
+                data = archive.read(name)  # zipfile checks the CRC-32 of each member.
+            digest = hashlib.sha256(data).hexdigest()
+            if args.sha256 and digest != args.sha256.lower():
+                raise SystemExit(f'SHA-256 mismatch for {name}: {digest}. The file was not saved.')
             if not output.exists():
-                output.write_bytes(archive.read(name))
-            print(output, flush=True)
+                temporary = output.with_suffix(output.suffix + '.part')
+                temporary.write_bytes(data)
+                temporary.replace(output)
+            print(output, 'sha256', digest, flush=True)
