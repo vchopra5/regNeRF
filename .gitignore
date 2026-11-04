@@ -27,3 +27,6 @@ __pycache__/
 /notebooks/exports/
 
 */assets/
+
+# Trained scan 40 models shared with the notebooks (weights only, about 2.5 MB each)
+!/notebooks/models/*.pt
