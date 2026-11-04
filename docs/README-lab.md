@@ -48,29 +48,31 @@ The [evaluation record](../notebooks/results/scan40.json) stores checkpoint path
 
 ## Extension
 
-Does a penalty that uses colour edges improve the stone arch? **The added edge L1 term increases mean foreground RGB PSNR by 0.38 dB.** It improves the score in 20 of 25 test views.
+Does a penalty that uses colour edges improve the stone arch? We trained the same method twice. **The added edge L1 term increases mean foreground RGB PSNR in both runs: +0.38 dB and +0.23 dB, an average of +0.31 dB.**
 
-| RegNeRF | RegNeRF + edge L1 | Edge L1 minus RegNeRF |
-| --- | --- | --- |
-| 18.37 dB | 18.76 dB | **+0.38 dB** |
+| Run | RegNeRF | RegNeRF + edge L1 | Edge L1 minus RegNeRF | Better in |
+| --- | --- | --- | --- | --- |
+| First (RTX 5090) | 18.37 dB | 18.76 dB | **+0.38 dB** | 20 of 25 views |
+| Second (RTX 4070) | 18.42 dB | 18.65 dB | **+0.23 dB** | 13 of 25 views |
+| **Average** | 18.40 dB | 18.70 dB | **+0.31 dB** | |
 
 Notebook 3 starts with three small experiments. Increase smoothing between two pixels, then disconnect them. Spread a depth step over more pixels and compare its L1 and L2 costs. Then change the colour guide to test an aligned edge, a texture edge, and a missing colour edge. These calculations have known depth. They show how smoothing can remove a real boundary and how colour weights change the fit.
 
 Teodor's regularizer keeps RegNeRF's L2 depth penalty and adds a weighted L1 penalty on fine depth. A blur and Sobel filters detect colour gradients in rendered patches. Strong colour gradients reduce the added penalty. The colour weights receive no gradients. The original L2 penalty remains active at the boundary.
 
-Both models train on DTU scan 40, views **25, 22, and 28**, with seed 42 and 20,000 steps. They use Adam, coarse jitter, training scale 4, and the same sampling and bounds schedule. The fine L2 weight falls from 400 to 0.1 over 512 steps. Coarse L2 stays at 0.1. The extension adds fine L1 with coefficient 0.1, fixed before training. Test photos and masks do not enter training or select this coefficient.
+Both models train on DTU scan 40, views **25, 22, and 28**, with seed 42 and 20,000 steps. They use Adam, coarse jitter, training scale 4, and the same sampling and bounds schedule. The fine L2 weight falls from 400 to 0.1 over 512 steps. Coarse L2 stays at 0.1. The extension adds fine L1 with coefficient λ = 0.1. The first run fixed λ before training. The second run confirmed it with a pilot: three 5,000-step runs with λ = 0.01, 0.1, and 1, scored on validation views 40, 44, and 48. λ = 0.1 scored highest; λ = 1 lost 2.2 dB. Test photos and masks do not enter training or select this coefficient.
 
-We evaluate both checkpoints at step 20,000 and scale 2. The table reports the **arithmetic mean of 25 per-view foreground RGB PSNR values**. The saved baseline was reused after checks of its settings, source, and training inputs. This pair uses a different baseline checkpoint from Notebook 2. Use the 18.37 dB baseline for this comparison, not Notebook 2's 18.42 dB result.
+We evaluate both checkpoints at step 20,000 and scale 2. The table reports the **arithmetic mean of 25 per-view foreground RGB PSNR values**. Each run has its own RegNeRF baseline. The first run reused an earlier RegNeRF run (18.37 dB) after checks of its settings, source, and training inputs. The second run used Notebook 2's RegNeRF model (18.42 dB). Compare each edge model with its own baseline. GPU arithmetic is not exactly repeatable, so two runs with the same seed differ.
 
 Select any of the 25 test views to inspect the arch opening, pillar edges, and top block. Each view shows both models and their RGB scores. The mean score uses all 25 test views. The depth panels use one shared scale: dark means near and light means far. The left reference panel is a colour photo.
 
-The added term reduces the vertical mark inside the opening. The depth boundary remains blurred, and both models distort the top block. **No reference depth is available for this scan, so we cannot measure boundary or flat-surface depth error.** The small simulations' depth scores do not apply to the arch. This is one scan and one seed, not the paper's benchmark aggregate. See the [extension record](../notebooks/results/partner_stone/results.json) for checkpoint paths, source hashes, settings, and all 25 scores. Earlier pendant results are separate from this notebook.
+The added term reduces the vertical mark inside the opening. The depth boundary remains blurred, and both models distort the top block. **No reference depth is available for this scan, so we cannot measure boundary or flat-surface depth error.** The small simulations' depth scores do not apply to the arch. Single views do not repeat: the two runs agree on the sign of the change in only 10 of 25 views. The second run's mask-outline metrics show a colour gain spread over the whole object and no sharper depth edges. This is one scan and two runs with one seed, not the paper's benchmark aggregate. See the [first-run record](../notebooks/results/partner_stone/results.json) and the [second-run record](../notebooks/results/scan40_edge.json) for checkpoint paths, source hashes, settings, the pilot, and all 25 scores. Earlier pendant results are separate from this notebook.
 
 Next, compare added uniform L1 with added weighted L1 at the same coefficient. Repeat with more seeds and use reference depth to measure errors at true boundaries and on flat surfaces.
 
 ## Interactive visualization
 
-Use the controls to compare models, camera views, RGB images, depth maps, and errors. In the toy case, move a depth patch and inspect the change in its penalty. In the paper notebook, select a test view or optionally render a moved camera. In the extension, connect or disconnect two pixels, spread a depth step, and change the colour guide. Then compare saved RGB and depth for the stone arch. Use the two camera sliders to look around it from a new position, then select **Render view**.
+Use the controls to compare models, camera views, RGB images, depth maps, and errors. In the toy case, move a depth patch and inspect the change in its penalty. In the paper notebook, select a test view or optionally render a moved camera. In the extension, connect or disconnect two pixels, spread a depth step, and change the colour guide. Then compare saved RGB and depth for the stone arch. Use the two camera sliders to look around it from a new position, then select **Render view**. Try turn −52°, tilt 24°: there, both RegNeRF models break into floaters, and both edge-L1 models keep a solid block. We chose this angle after inspecting renders, so it is an illustration, not a measurement.
 
 ## Path through the notebooks
 
@@ -80,7 +82,7 @@ The three notebooks form one investigation. They are interactive **marimo notebo
 | --- | --- | --- | --- |
 | 1 | [Toy case](../notebooks/01_toy.py) | Change camera coverage, move a depth patch, and compare smoothing off and on. Inspect RGB and known depth at 100, 300, and 1,000 training steps. | 15 min |
 | 2 | [Paper result](../notebooks/02_paper.py) | Switch among 25 scan 40 test views. Compare images, depth, and per-view RGB scores. Optionally render a moved camera. | 25 min |
-| 3 | [Extension](../notebooks/03_extension.py) | Test neighbour smoothing, L1/L2 costs, and colour guides. Inspect all 25 test views, then turn the camera around the arch and compare both models. | 30 min |
+| 3 | [Extension](../notebooks/03_extension.py) | Test neighbour smoothing, L1/L2 costs, and colour guides. See how the edge weight was chosen. Inspect all 25 test views, turn the camera around the arch, and compare two training runs. | 30 min |
 | 4 | Team discussion | State what improved, what did not, and which test should come next. | 5 min |
 
 **Total lesson time: about 75 minutes**, plus environment setup. Opening the notebooks does not start training. The saved lessons need no GPU, DTU download, or local training outputs.
@@ -127,7 +129,7 @@ PyTorch is required for the notebook environment and is installed by the command
 python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 ```
 
-These optional notebook tasks use CUDA when available and otherwise use the CPU. The toy archive, scan 40 reference images, saved comparisons, and 50 extension panels are included. Notebook 3 reads its panels and 25 test scores from `notebooks/results/partner_stone/`. The small experiments recalculate depth fits. The saved-view selector loads images. The camera panel renders new RGB and depth images only when you select **Render view**. It uses the two scored models in `notebooks/models/` and does not train.
+These optional notebook tasks use CUDA when available and otherwise use the CPU. The toy archive, scan 40 reference images, saved comparisons, and 50 extension panels are included. Notebook 3 reads its panels and 25 test scores from `notebooks/results/partner_stone/`, and the second run from `notebooks/results/scan40_edge.json`. The small experiments recalculate depth fits. The saved-view selector loads images. The camera panel renders new RGB and depth images only when you select **Render view**. It uses the two scored models in `notebooks/models/` and does not train.
 
 If you already use `uv`, `uv sync` installs the full project environment, including PyTorch. Use `uv run python` in place of `python` for the commands above.
 
@@ -147,7 +149,7 @@ Hardware and other work can change these times. Package-download time is separat
 
 For new DTU training, follow the [data and training guide](dtu_test.md). Read the protocol with `python -m experiments.compare_depth` first. Training requires `--run` and a new `--output-dir`. Keep earlier checkpoints. Use `python -m tools.eval_dtu --checkpoint PATH` for each model at the same evaluation scale.
 
-The [notebook guide](../notebooks/README.md) gives commands to rebuild saved evidence. The saved lessons do not need its DTU download steps; use those steps only to prepare new training data. Retraining the extension requires the scan 40 data and the baseline checkpoint recorded in `notebooks/results/partner_stone/results.json`. The saved Notebook 3 lesson needs neither.
+The [notebook guide](../notebooks/README.md) gives commands to rebuild saved evidence. The saved lessons do not need its DTU download steps; use those steps only to prepare new training data. Retraining the extension requires the scan 40 data and the baseline checkpoint recorded in `notebooks/results/partner_stone/results.json`. The second run used `python -m experiments.compare_edge --output-dir checkpoint/scan40_edge --pilot --run --score`, which took 2 hours 20 minutes on the RTX 4070 Laptop GPU, including the pilot. The saved Notebook 3 lesson needs neither.
 
 ## Division of work
 

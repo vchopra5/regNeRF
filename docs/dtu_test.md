@@ -6,7 +6,7 @@ The current experiment uses **DTU scan 40**, the stone arch in RegNeRF Figure 3.
 
 ## 1. Set up Python
 
-Use Python 3.10 or later in a separate environment. Activate that environment before you run the commands. Confirm that `python --version` prints the intended version.
+Use Python 3.11 or later in a separate environment. Activate that environment before you run the commands. Confirm that `python --version` prints the intended version.
 
 If you need a new environment, run `python -m venv .venv`. Activate it with `.venv\Scripts\Activate.ps1` in PowerShell, or `source .venv/bin/activate` in a POSIX shell. The repository ignores `.venv`.
 

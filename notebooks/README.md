@@ -6,13 +6,13 @@ Use the notebooks in order. Allow about 75 minutes for the team review.
 | --- | --- | --- |
 | `01_toy.py` | 15 min, plus optional training | Inspect the sphere, move a depth patch, then compare models trained with and without the patch penalty. |
 | `02_paper.py` | 25 min | Inspect scan 40 and compare with RegNeRF Table 3. |
-| `03_extension.py` | 30 min | Explore the edge L1 penalty, compare all 25 stone-arch views, then turn the camera around both models. |
+| `03_extension.py` | 30 min | Explore the edge L1 penalty, see how its weight was chosen, compare all 25 stone-arch views, turn the camera around both models, and compare two training runs. |
 | Discussion | 5 min | State the result, its limit, and the next test. |
 
 Each notebook has a question, a prediction, evidence, and discussion prompts.
 The first notebook uses saved two-sphere results. Every saved run was trained with 5 seeds (42, 142, 242, 342, 442) and coarse jitter. The images show seed 42; the scores cover all 5 seeds. The camera and shape sections use the same three-photo baseline at 500 steps. The final experiment compares smoothing off and on at 100, 300, and 1,000 steps. Select the lower or front camera in the final section. Each view has its own reference and scores. The lower view shows the curved stripe more clearly. It was chosen after inspecting the images, so it is an additional illustration rather than an independent test.
 
-The lab uses saved results only, so nothing trains. After the lab, open the optional panel at the end of the notebook and select **Run comparison** to train your own comparison. The default is a fine depth weight of 0.05 at 300 steps. The slider covers 0 to 0.10. Positive fine weights also enable the coarse weight of 0.10; zero disables both depth terms. Submission reuses matching results or trains the requested condition and any missing baseline. New runs save checkpoints, RGB, depth, scores, and code records under `checkpoint/toy_two_spheres_student_v3`. Every custom run passes seed 42 explicitly to the trainer. Model initialization, view sampling, and RGB ray sampling reset to this seed. A separate generator uses seed 43 for depth patches. Cache reuse requires the same seed, weight, step count, and coarse jitter setting. One training run saves renders for both cameras, so changing camera reuses the same model. The third notebook starts with a small depth problem, then reads the saved stone-arch comparison for RegNeRF and RegNeRF + edge L1.
+The lab uses saved results only, so nothing trains. After the lab, open the optional panel at the end of the notebook and select **Run comparison** to train your own comparison. The default is a fine depth weight of 0.05 at 300 steps. The slider covers 0 to 0.10. Positive fine weights also enable the coarse weight of 0.10; zero disables both depth terms. Submission reuses matching results or trains the requested condition and any missing baseline. New runs save checkpoints, RGB, depth, scores, and code records under `checkpoint/toy_two_spheres_student_v3`. Every custom run passes seed 42 explicitly to the trainer. Model initialization, view sampling, and RGB ray sampling reset to this seed. A separate generator uses seed 43 for depth patches. Cache reuse requires the same seed, weight, step count, and coarse jitter setting. One training run saves renders for both cameras, so changing camera reuses the same model. The third notebook starts with small depth problems, then reads the saved stone-arch comparisons of RegNeRF and RegNeRF + edge L1 from two training runs.
 
 **Open these figures if you cannot run Notebook 1.**
 
@@ -45,7 +45,7 @@ and a repeated angle separately. It does not train. It replaces the saved timing
 
 The camera-motion slider redraws the stripe and camera diagram from cached depth arrays in under one second per change.
 
-Use Python 3.10 or later. Run these commands from the repository root in a Python environment:
+Use Python 3.11 or later. Run these commands from the repository root in a Python environment:
 
 ```sh
 python -m pip install -r requirements-notebooks.txt
@@ -71,7 +71,8 @@ import path. Direct marimo commands also work with the repository root on `PYTHO
 Notebook 2 includes 28 small reference photos, the camera data, all 25 saved model comparisons,
 and the scored model weights. Its live render uses the bundled camera data and models.
 Install all required packages before you use the moved-camera panel.
-Notebook 3 includes 50 stone-arch panels and the 25-view score record for both models.
+Notebook 3 includes 50 stone-arch panels and the 25-view score record for both models of the first run,
+and the second run's record (`results/scan40_edge.json`) with its weight pilot and edge metrics.
 Its camera panel turns horizontally from −180° to 180° and vertically from −90° to 90°.
 Select **Render view** to draw both models from the same position. Colour and depth tabs
 show the fixed start above the new view. Repeated angles reuse the images.
@@ -79,7 +80,8 @@ The panel uses `scan40_extension_regnerf.pt` and `scan40_edge_l1.pt` in `noteboo
 It checks their hashes and source checkpoints against the Notebook 3 scores.
 These are a different model pair from Notebook 2. The camera files and weights are included;
 no DTU download is needed. Each render reports its elapsed time. New angles have no reference
-photo, so they do not receive a PSNR score. The small depth experiments and saved-view controls
+photo, so they do not receive a PSNR score. Try turn −52°, tilt 24°: both RegNeRF models break into
+floaters there, and both edge-L1 models keep a solid block. We chose this angle after inspecting renders. The small depth experiments and saved-view controls
 do not render or train. The camera panel renders only after you select the button.
 
 Run `python -m notebooks.verify_saved_notebooks --live-camera` to test a clean copy, including both camera panels. Use the command without `--live-camera` to test the saved lessons with PyTorch blocked. The check excludes
@@ -122,7 +124,7 @@ uv run python -m notebooks.evaluate_pair
 uv run python -m notebooks.render_scan40_views
 ```
 
-Training the pair took about 1 hour 20 minutes on an RTX 4070 Laptop GPU: 46 minutes for the depth-on model, 26 minutes for the depth-off model, and about 4 minutes to score each. Evaluation takes about 8 minutes and rendering about 4 minutes. `compare_depth.py` records the code revision and settings in `protocol.json` before training. `evaluate_pair` checks the pair against that record and writes `notebooks/results/scan40.json`. `render_scan40_views` renders all 25 test views from both models at scale 4 and writes them to `notebooks/results/scan40/` (a few MB of JPEG), so students can switch between views without a model or a GPU. Missing files and photos show a warning with the command that makes them.
+Training the pair took about 1 hour 20 minutes on an RTX 4070 Laptop GPU: 46 minutes for the depth-on model, 26 minutes for the depth-off model, and about 4 minutes to score each. Evaluation takes about 8 minutes and rendering about 4 minutes. `experiments/compare_depth.py` records the code revision and settings in `protocol.json` before training. `evaluate_pair` checks the pair against that record and writes `notebooks/results/scan40.json`. `render_scan40_views` renders all 25 test views from both models at scale 4 and writes them to `notebooks/results/scan40/` (a few MB of JPEG), so students can switch between views without a model or a GPU. Missing files and photos show a warning with the command that makes them.
 
 Open the notebook with `env PYTHONPATH=$PWD uv run marimo run notebooks/02_paper.py` (fish) or `PYTHONPATH=$PWD uv run marimo run notebooks/02_paper.py` (bash, zsh).
 
@@ -131,15 +133,21 @@ Open the notebook with `env PYTHONPATH=$PWD uv run marimo run notebooks/02_paper
 Use [RegNeRF, Table 3](https://www.cvlibs.net/publications/Niemeyer2022CVPR.pdf)
 for the published reference values. The scan 40 comparison is a single-scan
 investigation with a different setup. It is not the paper benchmark aggregate.
-Notebook 3 compares RegNeRF + edge L1 with RegNeRF on DTU scan 40.
-Both models use 20,000 steps and seed 42. Mean foreground RGB PSNR increases
-from 18.37 to 18.76 dB: a difference of +0.38 dB. RegNeRF + edge L1 scores higher in
-20 of 25 test views. No reference depth is available, so the lesson does not
-report depth error for this scan. All depth displays share one scale and use no foreground mask.
-The lesson starts with small visual experiments, then shows the saved stone results.
-It reads `results/partner_stone/results.json` and 50 PNG panels. Opening it needs
-no local training checkpoints or DTU download. Use `python -m notebooks.package_partner_stone`
-to rebuild this bundle from saved local results. This does not train or render a model.
+Notebook 3 compares RegNeRF + edge L1 with RegNeRF on DTU scan 40, in two training runs
+with the same code, 20,000 steps, and seed 42. Mean foreground RGB PSNR increases by +0.38 dB
+in the first run (18.37 to 18.76 dB, higher in 20 of 25 test views) and by +0.23 dB in the
+second (18.42 to 18.65 dB, higher in 13 of 25). The average is +0.31 dB. Single views do not
+repeat between the runs. The edge weight λ = 0.1 was fixed in the first run and confirmed by a
+pilot on validation views 40, 44, and 48 in the second. No reference depth is available, so the
+lesson does not report depth error for this scan; the second run's mask-outline metrics show no
+sharper depth edges. All depth displays share one scale and use no foreground mask.
+
+The lesson reads `results/partner_stone/results.json`, 50 PNG panels, and
+`results/scan40_edge.json`. Opening it needs no local training checkpoints or DTU download.
+Use `python -m notebooks.package_partner_stone` to rebuild the first-run bundle from saved local
+results; it does not train or render a model. The second run was produced with
+`python -m experiments.compare_edge --output-dir checkpoint/scan40_edge --pilot --run --score`
+(2 hours 20 minutes on an RTX 4070 Laptop GPU). This command trains.
 
 The controls follow [marimo's input API](https://docs.marimo.io/api/inputs/).
 The source code is visible in each notebook for the team to inspect.

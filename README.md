@@ -42,19 +42,23 @@ This is a **single-scan investigation of RegNeRF Table 3**. The paper reports a 
 
 ## Extension
 
-We extended the model tp add a weighted L1 depth penalty to RegNeRF. Colour edges reduce its weight; the original L2 penalty stays active. On DTU scan 40, it increases mean foreground RGB PSNR by **0.38 dB**, with gains in 20 of 25 test views.
+We extended the model to add a weighted L1 depth penalty to RegNeRF. Colour edges reduce its weight; the original L2 penalty stays active. We trained the same method twice on DTU scan 40. Both runs increase mean foreground RGB PSNR over RegNeRF:
 
-| RegNeRF | RegNeRF + edge L1 | Edge L1 minus RegNeRF |
-| --- | --- | --- |
-| 18.37 dB | 18.76 dB | **+0.38 dB** |
+| Run | RegNeRF | RegNeRF + edge L1 | Edge L1 minus RegNeRF | Better in |
+| --- | --- | --- | --- | --- |
+| First (RTX 5090) | 18.37 dB | 18.76 dB | **+0.38 dB** | 20 of 25 views |
+| Second (RTX 4070) | 18.42 dB | 18.65 dB | **+0.23 dB** | 13 of 25 views |
+| **Average** | 18.40 dB | 18.70 dB | **+0.31 dB** | |
 
-Scores are average of 25 test-view foreground RGB PSNR values at step 20,000 and scale 2. This pair uses its own **18.37 dB baseline**.
+Scores are the mean of 25 test-view foreground RGB PSNR values at step 20,000 and scale 2. Both runs use the same code, seed 42, and views 25, 22, and 28. Each pair uses its own RegNeRF baseline. GPU arithmetic is not exactly repeatable, so two runs with the same seed differ.
 
-The mark inside the opening is reduced, but depth edges remain blurred. No reference depth is available to measure shape error. This is a single-scan investigation of RegNeRF Table 3, with one seed. [Notebook 3](notebooks/03_extension.py) contains the small depth experiments and arch comparisons.
+The penalty has one weight, λ = 0.1. The first run fixed it in advance. The second run confirmed it with a pilot: three 5,000-step runs with λ = 0.01, 0.1, and 1, scored on validation views 40, 44, and 48, which are not test views. λ = 0.1 scored highest; λ = 1 lost 2.2 dB.
+
+Only the mean repeats. The two runs agree on the sign of the change in only 10 of 25 views. The mask outline metrics of the second run show a colour gain spread over the whole object and no sharper depth edges. In the first run, the mark inside the opening is reduced, but depth edges remain blurred. No reference depth is available to measure shape error. This is a single-scan investigation of RegNeRF Table 3. [Notebook 3](notebooks/03_extension.py) contains the small depth experiments, the weight pilot, and both arch comparisons.
 
 ## Interactive visualization
 
-Use the controls to compare models, camera views, RGB images, depth maps, and errors. In the toy case, move a depth patch and inspect the change in its penalty. In the paper notebook, select a test view or optionally render a moved camera. In the extension, connect or disconnect two pixels, spread a depth step, and change the colour guide. Then compare saved RGB and depth for the stone arch. Use the two camera sliders to look around it from a new position, then select **Render view**.
+Use the controls to compare models, camera views, RGB images, depth maps, and errors. In the toy case, move a depth patch and inspect the change in its penalty. In the paper notebook, select a test view or optionally render a moved camera. In the extension, connect or disconnect two pixels, spread a depth step, and change the colour guide. Then compare saved RGB and depth for the stone arch. Use the two camera sliders to look around it from a new position, then select **Render view**. Try turn −52°, tilt 24°: there, both RegNeRF models break into floaters, and both edge-L1 models keep a solid block. We chose this angle after inspecting renders, so it is an illustration, not a measurement.
 
 ## Path through the notebooks
 
@@ -63,10 +67,10 @@ The three notebooks form one investigation. They are interactive **marimo notebo
 | Order | Notebook | What to change and inspect | Time |
 | --- | --- | --- | --- |
 | 1 | [Toy case](notebooks/01_toy.py) | Change camera coverage, move a depth patch, and compare smoothing off and on. Inspect RGB and known depth at 100, 300, and 1,000 training steps. | 15 min |
-| 2 | [Paper result](notebooks/02_paper.py) | Switch among 25 DTU scan 40 test views. Compare images, depth, and per-view RGB scores. Optionally render a moved camera. | 15 min |
-| 3 | [Extension](notebooks/03_extension.py) | Test neighbour smoothing, L1/L2 costs, and colour guides. Inspect all 25 test views, then turn the camera around the arch and compare both models. | 15 min |
+| 2 | [Paper result](notebooks/02_paper.py) | Switch among 25 DTU scan 40 test views. Compare images, depth, and per-view RGB scores. Optionally render a moved camera. | 25 min |
+| 3 | [Extension](notebooks/03_extension.py) | Test neighbour smoothing, L1/L2 costs, and colour guides. See how the edge weight was chosen. Inspect all 25 test views, turn the camera around the arch, and compare two training runs. | 30 min |
 
-**Total lesson time: about 45 minutes**, plus environment setup. Opening the notebooks does not start training.
+**Total lesson time: about 70 minutes**, plus environment setup. Opening the notebooks does not start training.
 
 
 ## Open the notebooks

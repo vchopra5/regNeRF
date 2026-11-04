@@ -84,7 +84,7 @@ def _(ROOT, mo, small):
         **How to use this page.** Sections 1 to 4 are small experiments with known depth. Change the
         controls and read the box beside each figure. Sections 5 to 9 use saved results from the arch.
         Section 7 can render new camera views from the saved models. Nothing trains. Allow about
-        35 minutes.
+        30 minutes.
 
         1. Why does smoothing pull an edge together?
         2. Why does L2 blur a depth step?
